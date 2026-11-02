@@ -737,19 +737,38 @@
 
               <div class="control-group">
                 <div class="control-header">
-                  <span>Speaking Style / Emotion</span>
+                  <span>Speaking Style & Emotion (20 Styles)</span>
                 </div>
                 <select class="select-dropdown" id="styleSelector">
-                  <option value="narration">Professional Narration</option>
-                  <option value="conversational">Natural Conversational</option>
+                  <option value="neutral">Neutral (Balanced Studio Reference)</option>
+                  <option value="conversational" selected>Natural Conversational</option>
+                  <option value="professional">Professional Narration</option>
+                  <option value="news">Broadcast News Anchor</option>
+                  <option value="documentary">Documentary Narrator (Deep & Warm)</option>
                   <option value="storytelling">Storytelling & Audiobooks</option>
-                  <option value="documentary">Documentary</option>
-                  <option value="news">Broadcast News</option>
-                  <option value="educational">Educational Explanation</option>
-                  <option value="calm">Calm & Meditation</option>
                   <option value="energetic">Energetic Presentation</option>
+                  <option value="excited">Excited & Enthusiastic</option>
+                  <option value="happy">Happy & Upbeat</option>
+                  <option value="sad">Sad & Melancholy</option>
+                  <option value="angry">Angry & Emphatic</option>
+                  <option value="serious">Serious & Authoritative</option>
+                  <option value="curious">Curious & Inquisitive</option>
+                  <option value="sarcastic">Sarcastic Delivery</option>
                   <option value="dramatic">Dramatic Delivery</option>
+                  <option value="suspenseful">Suspenseful & Tense</option>
+                  <option value="calm">Calm & Meditation</option>
+                  <option value="whispering">Intimate Whisper</option>
+                  <option value="comedy">Comedic & Bouncy</option>
+                  <option value="cinematic">Cinematic Trailer Voice</option>
                 </select>
+              </div>
+
+              <div class="control-group">
+                <div class="control-header">
+                  <span>Emotion & Style Intensity</span>
+                  <span id="styleIntensityValDisplay">1.0x</span>
+                </div>
+                <input type="range" class="control-slider" id="styleIntensitySlider" min="0.2" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('styleIntensityValDisplay').innerText = parseFloat(this.value).toFixed(1) + 'x'">
               </div>
 
               <div class="control-group">
@@ -896,16 +915,67 @@
         </div>
       </section>
 
-      <!-- TAB 5: 100+ VOICE LIBRARY (BROWSER) -->
+      <!-- TAB 5: 100+ VOICE LIBRARY & A/B TESTING STUDIO -->
       <section id="voicesTab" class="view-panel">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <h2>Voice Library (115 Profiles)</h2>
-          <input type="text" id="fullCatalogSearch" class="voice-search-input" style="width:300px;" placeholder="Search all 100+ voices..." oninput="renderFullCatalog()">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div>
+            <h2>Voice Catalog & A/B Comparison Studio</h2>
+            <p style="color:var(--text-muted); font-size:13px;">Audited native neural voices (Kokoro-82M, Piper VITS, MMS Gujarati) & side-by-side acoustic testing.</p>
+          </div>
+          <input type="text" id="fullCatalogSearch" class="voice-search-input" style="width:300px;" placeholder="Search all voices..." oninput="renderFullCatalog()">
+        </div>
+
+        <!-- VOICE A/B COMPARISON CARD -->
+        <div class="studio-card" style="margin-bottom:20px; border:1px solid var(--accent-blue); padding:16px;">
+          <h3 style="font-size:15px; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+            <span>⚖️ Voice A/B Comparative Auditioning</span>
+            <span class="tag" style="background:var(--accent-blue); color:#fff; font-size:11px;">Acoustic Differentiation</span>
+          </h3>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">Render the identical sentence across two distinct voices side-by-side to evaluate timber, pacing, resonance, and pronunciation.</p>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-bottom:12px;">
+            <div>
+              <label style="font-size:12px; font-weight:600;">Voice A (Primary Candidate):</label>
+              <select id="voiceASelector" class="select-dropdown" style="margin-top:4px;">
+                <!-- Filled dynamically with installed voices -->
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px; font-weight:600;">Voice B (Challenger Candidate):</label>
+              <select id="voiceBSelector" class="select-dropdown" style="margin-top:4px;">
+                <!-- Filled dynamically with installed voices -->
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:12px; font-weight:600;">Test Evaluation Script:</label>
+            <input type="text" id="voiceABTestText" class="voice-search-input" style="width:100%; margin-top:4px;" value="The quick brown fox jumps over the lazy dog. Studio quality voice synthesis delivers crystal clear communication.">
+          </div>
+          <div style="display:flex; gap:12px; align-items:center;">
+            <button class="btn-generate" id="runABTestBtn" onclick="runVoiceABComparison()" style="width:auto; padding:8px 18px;">
+              ▶ Compare Voices A & B
+            </button>
+            <span id="abTestStatus" style="font-size:12px; color:var(--text-muted);">Ready to compare.</span>
+          </div>
+
+          <!-- COMPARISON RESULTS VIEW -->
+          <div id="abResultsContainer" style="display:none; margin-top:16px; grid-template-columns:1fr 1fr; gap:16px; border-top:1px solid var(--border-color); padding-top:14px;">
+            <div id="voiceACard" style="background:var(--bg-primary); padding:12px; border-radius:6px; border:1px solid var(--border-color);">
+              <div style="font-weight:600; color:var(--accent-blue);" id="resVoiceAName">Voice A</div>
+              <div style="font-size:12px; color:var(--text-muted); margin:4px 0 8px 0;" id="resVoiceAMeta">Duration: -</div>
+              <button class="btn-tool" id="playVoiceABtn" style="width:100%;">▶ Play Voice A</button>
+            </div>
+            <div id="voiceBCard" style="background:var(--bg-primary); padding:12px; border-radius:6px; border:1px solid var(--border-color);">
+              <div style="font-weight:600; color:#7ee787;" id="resVoiceBName">Voice B</div>
+              <div style="font-size:12px; color:var(--text-muted); margin:4px 0 8px 0;" id="resVoiceBMeta">Duration: -</div>
+              <button class="btn-tool" id="playVoiceBBtn" style="width:100%;">▶ Play Voice B</button>
+            </div>
+          </div>
         </div>
 
         <table class="data-table">
           <thead>
             <tr>
+              <th>Status</th>
               <th>Voice Name</th>
               <th>Language</th>
               <th>Accent</th>
@@ -1030,6 +1100,10 @@
               <button class="nav-btn sfx-preset-btn" style="border:1px solid var(--border-color); padding:10px; justify-content:center;" onclick="selectSfxPreset('retro_laser', this)">🔫 8-Bit Laser</button>
               <button class="nav-btn sfx-preset-btn" style="border:1px solid var(--border-color); padding:10px; justify-content:center;" onclick="selectSfxPreset('notification_chime', this)">🔔 Notification Triad</button>
               <button class="nav-btn sfx-preset-btn" style="border:1px solid var(--border-color); padding:10px; justify-content:center;" onclick="selectSfxPreset('comedic_transition', this)">🎺 Wah Wah Fail</button>
+              <button class="nav-btn sfx-preset-btn" style="border:1px solid var(--border-color); padding:10px; justify-content:center;" onclick="selectSfxPreset('rain_ambience', this)">🌧️ Rain Ambience</button>
+              <button class="nav-btn sfx-preset-btn" style="border:1px solid var(--border-color); padding:10px; justify-content:center;" onclick="selectSfxPreset('wind_gust', this)">💨 Wind Gust</button>
+              <button class="nav-btn sfx-preset-btn" style="border:1px solid var(--border-color); padding:10px; justify-content:center;" onclick="selectSfxPreset('thunder_clap', this)">⛈️ Thunder Clap</button>
+              <button class="nav-btn sfx-preset-btn" style="border:1px solid var(--border-color); padding:10px; justify-content:center;" onclick="selectSfxPreset('mechanical_hum', this)">⚡ Mechanical Hum</button>
             </div>
 
             <div style="margin-top:12px; background:var(--bg-primary); padding:14px; border-radius:6px; border:1px solid var(--border-color);">
@@ -1406,6 +1480,34 @@
       drawWaveform(cur / Math.max(dur, 0.1));
     }
 
+    let currentPcmPeaks = null;
+
+    async function extractAudioPeaks(url, barCount = 100) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const res = await fetch(url);
+        const arrayBuf = await res.arrayBuffer();
+        const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+        const pcm = audioBuf.getChannelData(0);
+        const step = Math.floor(pcm.length / barCount);
+        const peaks = new Float32Array(barCount);
+        for (let i = 0; i < barCount; i++) {
+          let maxVal = 0;
+          const start = i * step;
+          const end = Math.min(start + step, pcm.length);
+          for (let j = start; j < end; j++) {
+            const v = Math.abs(pcm[j]);
+            if (v > maxVal) maxVal = v;
+          }
+          peaks[i] = maxVal;
+        }
+        return peaks;
+      } catch (e) {
+        console.warn('Real PCM decoding fallback:', e);
+        return null;
+      }
+    }
+
     function drawWaveform(progress = 0) {
       const canvas = document.getElementById('waveformCanvas');
       if (!canvas) return;
@@ -1418,8 +1520,14 @@
       const progressIndex = Math.floor(bars * progress);
 
       for (let i = 0; i < bars; i++) {
-        // Pseudo-random deterministic waveform shape
-        const barH = Math.max(4, Math.sin(i * 0.15) * 12 + Math.cos(i * 0.35) * 8 + 14);
+        let barH;
+        if (currentPcmPeaks && currentPcmPeaks.length > 0) {
+          const peakIdx = Math.floor((i / bars) * currentPcmPeaks.length);
+          const peak = currentPcmPeaks[peakIdx] || 0.05;
+          barH = Math.max(3, peak * (h * 0.85));
+        } else {
+          barH = Math.max(4, Math.sin(i * 0.15) * 12 + Math.cos(i * 0.35) * 8 + 14);
+        }
         const x = i * 4;
         const y = (h - barH) / 2;
 
@@ -1443,7 +1551,15 @@
       audioElement.play().catch(e => console.log('Autoplay deferred:', e));
       isPlaying = true;
       document.getElementById('playPauseBtn').innerText = '⏸';
+      
+      currentPcmPeaks = null;
       drawWaveform(0);
+      extractAudioPeaks(url, 120).then(peaks => {
+        if (peaks) {
+          currentPcmPeaks = peaks;
+          drawWaveform(audioElement.currentTime / Math.max(audioElement.duration || audioDuration || 1, 0.1));
+        }
+      });
     }
 
     // TAB NAVIGATION
@@ -1489,22 +1605,23 @@
 
     function renderSidebarVoices(voices) {
       const container = document.getElementById('sidebarVoiceList');
-      container.innerHTML = voices.slice(0, 40).map(v => `
-        <div class="voice-card ${selectedVoice?.id === v.id ? 'selected' : ''}" onclick='selectVoiceById("${v.id}")'>
+      container.innerHTML = voices.slice(0, 50).map(v => `
+        <div class="voice-card ${selectedVoice?.id === v.id ? 'selected' : ''}" onclick='selectVoiceById("${v.id}")' style="${v.is_installed === 0 ? 'opacity:0.65;' : ''}">
           <div class="voice-card-header">
             <span>${v.name}</span>
-            <span class="tag">${v.language}</span>
+            <span class="tag" style="background:${v.is_installed === 1 ? '#238636' : '#30363d'}; color:#fff; font-size:10px;">${v.is_installed === 1 ? 'Ready' : 'Offline'}</span>
           </div>
           <div class="voice-card-meta">
+            <span>${v.language}</span>
+            <span>•</span>
             <span>${v.gender}</span>
             <span>•</span>
-            <span>${v.category}</span>
-            <span>•</span>
-            <span style="color:${v.engine === 'kokoro' ? '#58a6ff' : '#7ee787'}">${v.engine}</span>
+            <span style="color:${v.engine === 'kokoro' ? '#58a6ff' : v.engine === 'piper' ? '#7ee787' : '#d29922'}">${v.engine}</span>
           </div>
         </div>
       `).join('');
-      document.getElementById('voiceCountBadge').innerText = `${voices.length} voices`;
+      const installedCount = voices.filter(v => v.is_installed === 1).length;
+      document.getElementById('voiceCountBadge').innerText = `${installedCount} Active / ${voices.length} Total`;
     }
 
     function filterVoiceList() {
@@ -1527,9 +1644,20 @@
       selectedVoice = voice;
       document.getElementById('activeVoiceNameDisplay').innerText = voice.name;
       document.getElementById('activeVoiceLang').innerText = voice.language;
-      document.getElementById('activeVoiceDesc').innerText = voice.description;
-      document.getElementById('selectedVoicePill').innerHTML = `<span>Voice: ${voice.name}</span>`;
-      document.getElementById('activeModelTag').innerText = voice.engine.toUpperCase();
+      document.getElementById('activeVoiceDesc').innerText = voice.description + (voice.is_installed === 0 ? ' (⚠️ Offline model: requires download)' : '');
+      document.getElementById('selectedVoicePill').innerHTML = `<span>Voice: ${voice.name} ${voice.is_installed === 1 ? '●' : '○'}</span>`;
+      document.getElementById('activeModelTag').innerText = (voice.is_installed === 1 ? '' : '[OFFLINE] ') + voice.engine.toUpperCase();
+      
+      const genBtn = document.getElementById('generateBtn');
+      if (genBtn) {
+        if (voice.is_installed === 0) {
+          genBtn.disabled = true;
+          genBtn.title = "This voice model is not installed locally. Please select an installed voice.";
+        } else {
+          genBtn.disabled = false;
+          genBtn.title = "";
+        }
+      }
       renderSidebarVoices(allVoices);
     }
 
@@ -1605,6 +1733,8 @@
         speed: parseFloat(document.getElementById('speedSlider').value),
         pitch: parseFloat(document.getElementById('pitchSlider').value),
         volume: parseFloat(document.getElementById('volumeSlider').value),
+        style: document.getElementById('styleSelector') ? document.getElementById('styleSelector').value : 'conversational',
+        style_intensity: document.getElementById('styleIntensitySlider') ? parseFloat(document.getElementById('styleIntensitySlider').value) : 1.0,
         format: document.getElementById('formatSelector').value
       };
 
@@ -1632,24 +1762,66 @@
     // MULTI-VOICE DIALOGUE EDITOR
     function renderDialogueEditor() {
       const container = document.getElementById('dialogueSegmentsContainer');
+      const installedVoices = allVoices.filter(v => v.is_installed === 1);
+      const voiceListToUse = installedVoices.length > 0 ? installedVoices : allVoices.slice(0, 31);
+
       container.innerHTML = currentDialogueProject.segments.map((seg, idx) => `
         <div class="studio-card" style="padding:12px; border-left:3px solid var(--accent-blue);">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex; gap:10px; align-items:center;">
               <input type="text" class="voice-search-input" style="width:120px; font-weight:600;" value="${seg.speaker_label}" onchange="updateSegment(${idx}, 'speaker_label', this.value)">
-              <select class="select-dropdown" style="width:180px;" onchange="updateSegment(${idx}, 'voice_id', this.value)">
-                ${allVoices.slice(0, 30).map(v => `<option value="${v.id}" ${v.id === seg.voice_id ? 'selected' : ''}>${v.name}</option>`).join('')}
+              <select class="select-dropdown" style="width:200px;" onchange="updateSegment(${idx}, 'voice_id', this.value)">
+                ${voiceListToUse.map(v => `<option value="${v.id}" ${v.id === seg.voice_id ? 'selected' : ''}>${v.name} (${v.gender})</option>`).join('')}
               </select>
             </div>
             <div style="display:flex; gap:8px; align-items:center;">
-              <span style="font-size:11px; color:var(--text-muted);">Pause After:</span>
-              <input type="number" class="voice-search-input" style="width:70px;" value="${seg.pause_after_ms}" onchange="updateSegment(${idx}, 'pause_after_ms', this.value)">
-              <button class="btn-tool" onclick="removeDialogueLine(${idx})">✕</button>
+              <span style="font-size:11px; color:var(--text-muted);">Pause:</span>
+              <input type="number" class="voice-search-input" style="width:65px;" value="${seg.pause_after_ms}" onchange="updateSegment(${idx}, 'pause_after_ms', this.value)">
+              <button class="btn-tool" id="segRenderBtn_${idx}" onclick="renderDialogueSegment(${idx})" style="padding:4px 8px; font-size:11px;">
+                ${seg.audio_url ? '▶ Play' : '⚡ Audition'}
+              </button>
+              <button class="btn-tool" onclick="removeDialogueLine(${idx})" style="padding:4px 8px;">✕</button>
             </div>
           </div>
-          <textarea class="tts-textarea" style="min-height:50px; height:60px; margin-top:8px;" onchange="updateSegment(${idx}, 'text_content', this.value)">${seg.text_content}</textarea>
+          <textarea class="tts-textarea" style="min-height:50px; height:55px; margin-top:8px;" onchange="updateSegment(${idx}, 'text_content', this.value)">${seg.text_content}</textarea>
         </div>
       `).join('');
+    }
+
+    async function renderDialogueSegment(idx) {
+      const seg = currentDialogueProject.segments[idx];
+      if (seg.audio_url) {
+        return loadAudioTrack(seg.audio_url, `${seg.speaker_label}: ${seg.text_content.slice(0, 24)}...`, seg.duration_seconds);
+      }
+      const btn = document.getElementById(`segRenderBtn_${idx}`);
+      if (btn) btn.innerText = 'Rendering...';
+      try {
+        const res = await fetch('/api/tts/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: seg.text_content,
+            voice_id: seg.voice_id,
+            speed: seg.speed || 1.0,
+            pitch: seg.pitch || 0.0,
+            volume: seg.volume || 1.0,
+            format: 'wav'
+          })
+        });
+        const data = await res.json();
+        if (data.audio_url) {
+          seg.audio_url = data.audio_url;
+          seg.duration_seconds = data.duration_seconds;
+          loadAudioTrack(data.audio_url, `${seg.speaker_label}: ${seg.text_content.slice(0, 24)}...`, data.duration_seconds);
+          renderDialogueEditor();
+        } else {
+          alert('Error: ' + (data.detail || 'Could not synthesize segment.'));
+          if (btn) btn.innerText = '⚡ Audition';
+        }
+      } catch (err) {
+        alert('Synthesis network error: ' + err.message);
+        if (btn) btn.innerText = '⚡ Audition';
+      }
     }
 
     function addDialogueLine() {
@@ -1833,23 +2005,88 @@
       const filtered = allVoices.filter(v => 
         v.name.toLowerCase().includes(q) ||
         v.language.toLowerCase().includes(q) ||
-        v.category.toLowerCase().includes(q)
+        v.category.toLowerCase().includes(q) ||
+        v.accent.toLowerCase().includes(q)
       );
 
+      // Populate A/B dropdowns with installed voices
+      const installedVoices = allVoices.filter(v => v.is_installed === 1);
+      const selA = document.getElementById('voiceASelector');
+      const selB = document.getElementById('voiceBSelector');
+      if (selA && selB && selA.children.length === 0) {
+        selA.innerHTML = installedVoices.map(v => `<option value="${v.id}" ${v.id === 'af_heart' ? 'selected' : ''}>${v.name} (${v.engine} • ${v.gender})</option>`).join('');
+        selB.innerHTML = installedVoices.map(v => `<option value="${v.id}" ${v.id === 'am_adam' ? 'selected' : ''}>${v.name} (${v.engine} • ${v.gender})</option>`).join('');
+      }
+
       tbody.innerHTML = filtered.map(v => `
-        <tr>
+        <tr style="${v.is_installed === 0 ? 'opacity:0.6;' : ''}">
+          <td>
+            <span class="tag" style="background:${v.is_installed === 1 ? '#238636' : '#30363d'}; color:#fff; font-size:11px;">
+              ${v.is_installed === 1 ? 'Installed (Ready)' : 'Model Offline'}
+            </span>
+          </td>
           <td><strong>${v.name}</strong></td>
           <td>${v.language}</td>
           <td>${v.accent}</td>
           <td>${v.gender}</td>
           <td><span class="tag">${v.category}</span></td>
-          <td>${v.engine}</td>
+          <td><span style="color:${v.engine === 'kokoro' ? '#58a6ff' : v.engine === 'piper' ? '#7ee787' : '#d29922'}; font-weight:600;">${v.engine}</span></td>
           <td><span style="font-size:11px; color:var(--text-muted);">${v.license_type}</span></td>
           <td>
-            <button class="btn-tool" onclick='selectVoiceById("${v.id}"); switchTab("ttsTab");'>Select</button>
+            ${v.is_installed === 1 
+              ? `<button class="btn-tool" onclick='selectVoiceById("${v.id}"); switchTab("ttsTab");'>Select</button>`
+              : `<button class="btn-tool" disabled style="opacity:0.5; cursor:not-allowed;" title="Model download required">Offline</button>`
+            }
           </td>
         </tr>
       `).join('');
+    }
+
+    async function runVoiceABComparison() {
+      const vAId = document.getElementById('voiceASelector').value;
+      const vBId = document.getElementById('voiceBSelector').value;
+      const text = document.getElementById('voiceABTestText').value.trim();
+      if (!text) return alert("Please enter text script to compare.");
+
+      const btn = document.getElementById('runABTestBtn');
+      const status = document.getElementById('abTestStatus');
+      const results = document.getElementById('abResultsContainer');
+      btn.disabled = true;
+      status.innerText = "Synthesizing Voice A and Voice B neural inference...";
+
+      try {
+        const [resA, resB] = await Promise.all([
+          fetch('/api/tts/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, voice_id: vAId, format: 'wav' })
+          }).then(r => r.json()),
+          fetch('/api/tts/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, voice_id: vBId, format: 'wav' })
+          }).then(r => r.json())
+        ]);
+
+        if (resA.audio_url && resB.audio_url) {
+          results.style.display = 'grid';
+          document.getElementById('resVoiceAName').innerText = `Voice A: ${vAId}`;
+          document.getElementById('resVoiceAMeta').innerText = `Duration: ${resA.duration_seconds}s • SNR: ${resA.quality?.snr_db || resA.quality?.estimated_snr_db || '34+'} dB`;
+          document.getElementById('playVoiceABtn').onclick = () => loadAudioTrack(resA.audio_url, `Voice A (${vAId})`, resA.duration_seconds);
+
+          document.getElementById('resVoiceBName').innerText = `Voice B: ${vBId}`;
+          document.getElementById('resVoiceBMeta').innerText = `Duration: ${resB.duration_seconds}s • SNR: ${resB.quality?.snr_db || resB.quality?.estimated_snr_db || '34+'} dB`;
+          document.getElementById('playVoiceBBtn').onclick = () => loadAudioTrack(resB.audio_url, `Voice B (${vBId})`, resB.duration_seconds);
+
+          status.innerText = `A/B Audition Ready! Δ Duration: ${Math.abs(resA.duration_seconds - resB.duration_seconds).toFixed(2)}s.`;
+        } else {
+          status.innerText = "Error: " + (resA.detail || resB.detail || "Comparison synthesis failed.");
+        }
+      } catch (err) {
+        status.innerText = "Error: " + err.message;
+      } finally {
+        btn.disabled = false;
+      }
     }
 
     // GENERATION HISTORY (TAB 7)

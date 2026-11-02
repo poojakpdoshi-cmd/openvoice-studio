@@ -737,6 +737,110 @@ const SoundEffectGenerators = {
       sampleOffset += durSamples;
     }
     return buf;
+  },
+
+  /**
+   * 15. Rain Ambience (Pink noise bed + randomized resonant droplet impulses)
+   */
+  rain_ambience: ({ duration = 3.0, rng = null, seed = null } = {}) => {
+    const actualRng = rng || (seed !== null && seed !== undefined ? createRng(seed) : null);
+    const numSamples = Math.floor(duration * SAMPLE_RATE);
+    const buf = new Float32Array(numSamples);
+    const pink = new PinkNoise(actualRng);
+    const filter = new BiquadFilter('bandpass', 1800, 1.2);
+    const dropFilter = new BiquadFilter('highpass', 2400, 2.0);
+
+    for (let i = 0; i < numSamples; i++) {
+      const p = pink.next();
+      const baseRain = filter.process(p) * 0.45;
+      
+      // Random droplet pings
+      const randVal = actualRng ? actualRng() : Math.random();
+      let drop = 0;
+      if (randVal < 0.003) {
+        const dropFreq = 2200 + (actualRng ? actualRng() : Math.random()) * 2000;
+        drop = Math.sin((i / SAMPLE_RATE) * 2 * Math.PI * dropFreq) * 0.7;
+      }
+      buf[i] = baseRain + dropFilter.process(drop);
+    }
+    return applyADSR(buf, SAMPLE_RATE, { attack: 0.1, decay: 0.1, sustain: 0.9, release: 0.2 });
+  },
+
+  /**
+   * 16. Wind Gust (Swept bandpass filtered pink noise with dynamic air turbulence)
+   */
+  wind_gust: ({ duration = 3.5, rng = null, seed = null } = {}) => {
+    const actualRng = rng || (seed !== null && seed !== undefined ? createRng(seed) : null);
+    const numSamples = Math.floor(duration * SAMPLE_RATE);
+    const buf = new Float32Array(numSamples);
+    const pink = new PinkNoise(actualRng);
+
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / SAMPLE_RATE;
+      const gustEnv = Math.sin((i / numSamples) * Math.PI);
+      const lfo = 0.5 + 0.5 * Math.sin(t * 1.8 * Math.PI);
+      const centerFreq = 300 + gustEnv * 650 + lfo * 200;
+      
+      const filter = new BiquadFilter('bandpass', centerFreq, 2.0);
+      const rawNoise = pink.next();
+      buf[i] = filter.process(rawNoise) * (gustEnv * 0.9 + 0.1);
+    }
+    return applyADSR(buf, SAMPLE_RATE, { attack: 0.4, decay: 0.2, sustain: 0.8, release: 0.5 });
+  },
+
+  /**
+   * 17. Thunder Clap (Explosive lowpass impact followed by long sub-bass decay)
+   */
+  thunder_clap: ({ duration = 4.0, rng = null, seed = null } = {}) => {
+    const actualRng = rng || (seed !== null && seed !== undefined ? createRng(seed) : null);
+    const numSamples = Math.floor(duration * SAMPLE_RATE);
+    const buf = new Float32Array(numSamples);
+    const pink = new PinkNoise(actualRng);
+    const subFilter = new BiquadFilter('lowpass', 180, 2.5);
+    const snapFilter = new BiquadFilter('bandpass', 1200, 1.5);
+
+    let subPhase = 0;
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / SAMPLE_RATE;
+      const crackleEnv = Math.exp(-t * 25.0);
+      const rand = actualRng ? actualRng() : Math.random();
+      const crackle = snapFilter.process((rand * 2 - 1) * crackleEnv * 1.5);
+
+      const rumbleEnv = Math.exp(-t * 1.2) * (1.0 + 0.3 * Math.sin(t * 8.0));
+      const p = pink.next();
+      const filteredPink = subFilter.process(p) * rumbleEnv * 1.8;
+
+      const subFreq = 55 * Math.exp(-t * 0.8) + 30;
+      subPhase += (2 * Math.PI * subFreq) / SAMPLE_RATE;
+      const subTone = Math.sin(subPhase) * rumbleEnv * 0.7;
+
+      buf[i] = crackle + filteredPink + subTone;
+    }
+    return applyDistortion(buf, 1.6, 'soft');
+  },
+
+  /**
+   * 18. Mechanical Hum (60 Hz AC electrical grid hum with rich harmonic overtones)
+   */
+  mechanical_hum: ({ duration = 2.5, baseFreq = 60 } = {}) => {
+    const numSamples = Math.floor(duration * SAMPLE_RATE);
+    const buf = new Float32Array(numSamples);
+    let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+    for (let i = 0; i < numSamples; i++) {
+      p1 += (2 * Math.PI * baseFreq) / SAMPLE_RATE;
+      p2 += (2 * Math.PI * baseFreq * 2) / SAMPLE_RATE;
+      p3 += (2 * Math.PI * baseFreq * 3) / SAMPLE_RATE;
+      p4 += (2 * Math.PI * baseFreq * 5) / SAMPLE_RATE;
+      
+      const wave = (
+        Math.sin(p1) * 0.7 +
+        Math.sin(p2) * 0.35 +
+        Math.sin(p3) * 0.2 +
+        Math.sin(p4) * 0.1
+      );
+      buf[i] = wave;
+    }
+    return applyADSR(buf, SAMPLE_RATE, { attack: 0.05, decay: 0.05, sustain: 0.95, release: 0.1 });
   }
 };
 
@@ -1536,7 +1640,11 @@ function parseProceduralPrompt(promptText) {
     { preset: 'retro_jump', category: 'gaming', keys: ['retro jump', 'jump sound', '8-bit jump', '8bit jump', 'jump'] },
     { preset: 'retro_laser', category: 'gaming', keys: ['laser zap', 'phaser', 'pew pew', 'arcade zap', 'laser'] },
     { preset: 'notification_chime', category: 'ui', keys: ['bell chime', 'notification sound', 'ui ding', 'alert chime', 'chime', 'notification'] },
-    { preset: 'comedic_transition', category: 'comedy', keys: ['wah wah', 'fail sound', 'failure trombone', 'sad trombone', 'comedic transition', 'fail'] }
+    { preset: 'comedic_transition', category: 'comedy', keys: ['wah wah', 'fail sound', 'failure trombone', 'sad trombone', 'comedic transition', 'fail'] },
+    { preset: 'rain_ambience', category: 'environmental', keys: ['rain', 'rainfall', 'storm rain', 'water drops', 'raining'] },
+    { preset: 'wind_gust', category: 'environmental', keys: ['wind', 'wind gust', 'breeze', 'gale', 'howling wind'] },
+    { preset: 'thunder_clap', category: 'environmental', keys: ['thunder', 'thunder clap', 'lightning strike', 'thunderstorm', 'rumble'] },
+    { preset: 'mechanical_hum', category: 'sci-fi', keys: ['mechanical hum', 'electrical hum', '60hz', 'generator hum', 'engine hum', 'drone hum'] }
   ];
 
   const isExplicitMusic = text.includes('music') || text.includes('song') || text.includes('theme') || text.includes('beat') || text.includes('track') || text.includes('groove');

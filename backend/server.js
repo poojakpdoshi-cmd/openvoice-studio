@@ -393,6 +393,14 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // 4B. Speaking Styles & Emotion Profiles
+    if (pathname === '/api/tts/styles' && method === 'GET') {
+      return sendJson(200, {
+        count: Object.keys(neuralEngine.SPEAKING_STYLES).length,
+        styles: neuralEngine.SPEAKING_STYLES
+      });
+    }
+
     // 5. Genuine Neural Speech Synthesis
     if (pathname === '/api/tts/generate' && method === 'POST') {
       const body = await getBody();
@@ -403,7 +411,17 @@ const server = http.createServer(async (req, res) => {
       const speed = parseFloat(body.speed) || 1.0;
       const pitch = parseFloat(body.pitch) || 0.0;
       const volume = parseFloat(body.volume) || 1.0;
+      const style = (body.style || 'neutral').toLowerCase();
+      const styleIntensity = body.style_intensity !== undefined ? parseFloat(body.style_intensity) : 1.0;
       const formatType = (body.format || 'wav').toLowerCase();
+
+      // Enforce strict voice installation policy: never silently substitute uninstalled models
+      const voiceRecord = db.prepare('SELECT is_installed FROM voices WHERE id = ?').get(voiceId);
+      if (voiceRecord && voiceRecord.is_installed === 0) {
+        return sendJson(400, {
+          detail: `Voice "${voiceId}" is not currently installed locally. Please select an installed voice model (e.g. Kokoro, Piper en_US Lessac, or hi_IN Pratham).`
+        });
+      }
 
       // Chunk text for long-form synthesis
       const chunks = chunkText(text, 280);
@@ -426,7 +444,14 @@ const server = http.createServer(async (req, res) => {
 
       for (const chunk of chunks) {
         const chunkOut = path.join(tempDir, `chunk_${chunk.index}.wav`);
-        await neuralEngine.synthesizeSpeech(chunk.text, voiceId, chunkOut, { speed, pitch, volume });
+        await neuralEngine.synthesizeSpeech(chunk.text, voiceId, chunkOut, {
+          speed,
+          pitch,
+          volume,
+          style,
+          styleIntensity,
+          customPronunciations: Object.fromEntries(pronunciationCache)
+        });
         chunkPaths.push(chunkOut);
         pauses.push(chunk.pause_after_ms || 300);
       }
@@ -466,7 +491,7 @@ const server = http.createServer(async (req, res) => {
         finalFile,
         formatType,
         expectedSampleRate,
-        JSON.stringify({ speed, pitch, volume })
+        JSON.stringify({ speed, pitch, volume, style, style_intensity: styleIntensity })
       );
 
       return sendJson(200, {
@@ -476,6 +501,8 @@ const server = http.createServer(async (req, res) => {
         duration_seconds: quality.duration_seconds,
         format: formatType,
         voice_id: voiceId,
+        style: style,
+        style_intensity: styleIntensity,
         chunks_rendered: chunks.length,
         quality: quality
       });
@@ -541,6 +568,36 @@ const server = http.createServer(async (req, res) => {
       // Select closest base timbre
       const baseTimbre = body.gender === 'Male' ? 'am_adam' : 'af_bella';
 
+      // Perform real acoustic extraction if reference sample is provided
+      const acousticFeatures = {
+        pitch_semitone_bias: body.gender === 'Male' ? -1.0 : 1.0,
+        formant_shift: body.gender === 'Male' ? 0.95 : 1.05,
+        estimated_f0_hz: body.gender === 'Male' ? 120.0 : 210.0,
+        sample_rate: 24000,
+        created_at: timestamp
+      };
+
+      const refPath = body.temporary_file_path || body.reference_file;
+      if (refPath && fs.existsSync(refPath)) {
+        try {
+          const analysis = await neuralEngine.analyzeAudioFile(refPath);
+          if (analysis.estimated_f0_hz) {
+            acousticFeatures.estimated_f0_hz = analysis.estimated_f0_hz;
+          }
+          if (analysis.pitch_semitone_bias !== undefined) {
+            acousticFeatures.pitch_semitone_bias = analysis.pitch_semitone_bias;
+          }
+          if (analysis.formant_shift !== undefined) {
+            acousticFeatures.formant_shift = analysis.formant_shift;
+          }
+          if (analysis.snr_db !== undefined) {
+            acousticFeatures.source_snr_db = analysis.snr_db;
+          }
+        } catch (analysisErr) {
+          console.warn('[Clone] Reference acoustic analysis note:', analysisErr.message);
+        }
+      }
+
       const profile = {
         id: voiceId,
         name: body.name.trim(),
@@ -557,12 +614,7 @@ const server = http.createServer(async (req, res) => {
           signature_hash: consentHash,
           policy: 'Non-impersonation, local-only sovereignty'
         },
-        acoustic_features: {
-          pitch_semitone_bias: body.gender === 'Female' ? 1.0 : -1.0,
-          formant_shift: body.gender === 'Female' ? 1.05 : 0.95,
-          sample_rate: 24000,
-          created_at: timestamp
-        }
+        acoustic_features: acousticFeatures
       };
 
       fs.writeFileSync(path.join(CUSTOM_VOICES_DIR, `${voiceId}.json`), JSON.stringify(profile, null, 2), 'utf8');
@@ -668,32 +720,92 @@ const server = http.createServer(async (req, res) => {
       return sendJson(200, { id: segId, project_id: projId, sequence_order: seq, ...body });
     }
 
+    // 8B. Individual Segment Rendering (Real-time segment re-rendering & dialogue master assembly)
+    if (pathname.match(/^\/api\/projects\/[^/]+\/segments\/[^/]+\/render$/) && method === 'POST') {
+      const parts = pathname.split('/');
+      const projId = parts[3];
+      const segId = parts[5];
+
+      const seg = db.prepare('SELECT * FROM project_segments WHERE id = ? AND project_id = ?').get(segId, projId);
+      if (!seg) return sendJson(404, { detail: 'Project segment not found' });
+
+      const segFileName = `seg_${segId}.wav`;
+      const segOut = path.join(AUDIO_DIR, segFileName);
+
+      await neuralEngine.synthesizeSpeech(seg.text_content, seg.voice_id, segOut, {
+        speed: seg.speed,
+        pitch: seg.pitch,
+        volume: seg.volume,
+        customPronunciations: Object.fromEntries(pronunciationCache)
+      });
+
+      const quality = await neuralEngine.analyzeAudioFile(segOut);
+
+      db.prepare(`
+        UPDATE project_segments
+        SET generated_audio_path = ?, duration_seconds = ?
+        WHERE id = ?
+      `).run(segFileName, quality.duration_seconds, segId);
+
+      // Re-concatenate master dialogue audio if other segments are present
+      const allSegments = db.prepare('SELECT * FROM project_segments WHERE project_id = ? ORDER BY sequence_order ASC').all(projId);
+      const segPaths = [];
+      const pauses = [];
+
+      for (const s of allSegments) {
+        const sPath = s.generated_audio_path ? path.join(AUDIO_DIR, s.generated_audio_path) : null;
+        if (sPath && fs.existsSync(sPath)) {
+          segPaths.push(sPath);
+          pauses.push(s.pause_after_ms || 400);
+        }
+      }
+
+      let masterUrl = null;
+      if (segPaths.length > 0) {
+        const masterProjectWav = path.join(AUDIO_DIR, `project_${projId}.wav`);
+        await concatenateFiles(segPaths, pauses, masterProjectWav, 24000);
+        masterUrl = `/api/audio/file/project_${projId}.wav`;
+      }
+
+      return sendJson(200, {
+        success: true,
+        segment_id: segId,
+        project_id: projId,
+        segment_audio_url: `/api/audio/file/${segFileName}`,
+        project_audio_url: masterUrl,
+        duration_seconds: quality.duration_seconds,
+        quality
+      });
+    }
+
     if (pathname.match(/^\/api\/projects\/[^/]+\/render$/) && method === 'POST') {
       const projId = pathname.split('/')[3];
       const segments = db.prepare('SELECT * FROM project_segments WHERE project_id = ? ORDER BY sequence_order ASC').all(projId);
       if (segments.length === 0) return sendJson(400, { detail: 'No segments to render.' });
 
-      const tempDir = path.join(AUDIO_DIR, `proj_render_${projId}`);
-      fs.mkdirSync(tempDir, { recursive: true });
-
       const segPaths = [];
       const pauses = [];
 
       for (const seg of segments) {
-        const segOut = path.join(tempDir, `${seg.id}.wav`);
-        await neuralEngine.synthesizeSpeech(seg.text_content, seg.voice_id, segOut, {
-          speed: seg.speed,
-          pitch: seg.pitch,
-          volume: seg.volume
-        });
+        const segFileName = `seg_${seg.id}.wav`;
+        const segOut = path.join(AUDIO_DIR, segFileName);
+        // Synthesize if missing
+        if (!fs.existsSync(segOut)) {
+          await neuralEngine.synthesizeSpeech(seg.text_content, seg.voice_id, segOut, {
+            speed: seg.speed,
+            pitch: seg.pitch,
+            volume: seg.volume,
+            customPronunciations: Object.fromEntries(pronunciationCache)
+          });
+          const segQ = await neuralEngine.analyzeAudioFile(segOut);
+          db.prepare('UPDATE project_segments SET generated_audio_path = ?, duration_seconds = ? WHERE id = ?').run(segFileName, segQ.duration_seconds, seg.id);
+        }
         segPaths.push(segOut);
         pauses.push(seg.pause_after_ms || 400);
       }
 
       const masterProjectWav = path.join(AUDIO_DIR, `project_${projId}.wav`);
       await concatenateFiles(segPaths, pauses, masterProjectWav, 24000);
-
-      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (e) {}
 
       const quality = await neuralEngine.analyzeAudioFile(masterProjectWav);
       return sendJson(200, {

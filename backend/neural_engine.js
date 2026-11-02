@@ -233,42 +233,342 @@ function floatTo16BitPcmWav(pcmData, sampleRate, volume = 1.0) {
 }
 
 /**
- * 6. Native Speech Inference Dispatcher
+ * 6. Authentic Speaking Style & Emotion Preset Registry
+ */
+const SPEAKING_STYLES = {
+  neutral: {
+    speedMultiplier: 1.0,
+    pitchSemitones: 0.0,
+    piperNoiseScale: 0.667,
+    piperNoiseW: 0.8,
+    dspFilter: null,
+    description: 'Balanced, neutral speaking tone.'
+  },
+  conversational: {
+    speedMultiplier: 1.02,
+    pitchSemitones: 0.0,
+    piperNoiseScale: 0.72,
+    piperNoiseW: 0.85,
+    dspFilter: 'conversational',
+    description: 'Natural cadence with conversational prosody.'
+  },
+  professional: {
+    speedMultiplier: 0.98,
+    pitchSemitones: 0.0,
+    piperNoiseScale: 0.62,
+    piperNoiseW: 0.75,
+    dspFilter: 'clarity',
+    description: 'Clear, authoritative corporate presentation tone.'
+  },
+  news: {
+    speedMultiplier: 1.06,
+    pitchSemitones: 0.2,
+    piperNoiseScale: 0.58,
+    piperNoiseW: 0.75,
+    dspFilter: 'broadcast_news',
+    description: 'Crisply articulated broadcast journalism style.'
+  },
+  documentary: {
+    speedMultiplier: 0.92,
+    pitchSemitones: -0.5,
+    piperNoiseScale: 0.64,
+    piperNoiseW: 0.78,
+    dspFilter: 'deep_documentary',
+    description: 'Measured, contemplative documentary narration.'
+  },
+  storytelling: {
+    speedMultiplier: 0.95,
+    pitchSemitones: 0.0,
+    piperNoiseScale: 0.75,
+    piperNoiseW: 0.88,
+    dspFilter: 'warm_story',
+    description: 'Expressive audiobook delivery with dynamic cadence.'
+  },
+  energetic: {
+    speedMultiplier: 1.15,
+    pitchSemitones: 0.8,
+    piperNoiseScale: 0.80,
+    piperNoiseW: 0.95,
+    dspFilter: 'energetic_punch',
+    description: 'Upbeat, high-energy presentation tone.'
+  },
+  excited: {
+    speedMultiplier: 1.18,
+    pitchSemitones: 1.2,
+    piperNoiseScale: 0.85,
+    piperNoiseW: 1.0,
+    dspFilter: 'energetic_punch',
+    description: 'Vibrant, excited delivery with bright pitch inflections.'
+  },
+  happy: {
+    speedMultiplier: 1.08,
+    pitchSemitones: 0.6,
+    piperNoiseScale: 0.75,
+    piperNoiseW: 0.88,
+    dspFilter: 'conversational',
+    description: 'Cheerful, optimistic tone.'
+  },
+  sad: {
+    speedMultiplier: 0.85,
+    pitchSemitones: -1.2,
+    piperNoiseScale: 0.45,
+    piperNoiseW: 0.60,
+    dspFilter: 'melancholy',
+    description: 'Somber, subdued cadence with softer dynamics.'
+  },
+  angry: {
+    speedMultiplier: 1.12,
+    pitchSemitones: 0.5,
+    piperNoiseScale: 0.88,
+    piperNoiseW: 1.05,
+    dspFilter: 'intense_drive',
+    description: 'Intense, assertive delivery with forceful articulation.'
+  },
+  serious: {
+    speedMultiplier: 0.94,
+    pitchSemitones: -0.6,
+    piperNoiseScale: 0.52,
+    piperNoiseW: 0.70,
+    dspFilter: 'clarity',
+    description: 'Grave, restrained vocal delivery.'
+  },
+  curious: {
+    speedMultiplier: 1.04,
+    pitchSemitones: 0.5,
+    piperNoiseScale: 0.76,
+    piperNoiseW: 0.90,
+    dspFilter: null,
+    description: 'Inquisitive intonation with lively sentence-ending inflection.'
+  },
+  sarcastic: {
+    speedMultiplier: 0.92,
+    pitchSemitones: -0.3,
+    piperNoiseScale: 0.70,
+    piperNoiseW: 0.95,
+    dspFilter: null,
+    description: 'Dry, drawn-out cadence with wry inflections.'
+  },
+  dramatic: {
+    speedMultiplier: 0.88,
+    pitchSemitones: -0.8,
+    piperNoiseScale: 0.78,
+    piperNoiseW: 0.95,
+    dspFilter: 'deep_documentary',
+    description: 'Theatrical, intense pauses with deep resonance.'
+  },
+  suspenseful: {
+    speedMultiplier: 0.82,
+    pitchSemitones: -0.5,
+    piperNoiseScale: 0.82,
+    piperNoiseW: 0.85,
+    dspFilter: 'whisper_soft',
+    description: 'Tense, breathless pacing with prolonged pauses.'
+  },
+  calm: {
+    speedMultiplier: 0.88,
+    pitchSemitones: -0.3,
+    piperNoiseScale: 0.35,
+    piperNoiseW: 0.55,
+    dspFilter: 'calm_silk',
+    description: 'Serene, rhythmic delivery for meditation and relaxation.'
+  },
+  whispering: {
+    speedMultiplier: 0.92,
+    pitchSemitones: 0.0,
+    piperNoiseScale: 0.95,
+    piperNoiseW: 0.70,
+    dspFilter: 'whisper_soft',
+    description: 'Intimate, breathy delivery with suppressed vocal cords.'
+  },
+  comedy: {
+    speedMultiplier: 1.12,
+    pitchSemitones: 0.7,
+    piperNoiseScale: 0.82,
+    piperNoiseW: 0.98,
+    dspFilter: 'energetic_punch',
+    description: 'Punchy, dynamic comic timing with animated pitch.'
+  },
+  cinematic: {
+    speedMultiplier: 0.86,
+    pitchSemitones: -1.0,
+    piperNoiseScale: 0.72,
+    piperNoiseW: 0.92,
+    dspFilter: 'cinematic_trailer',
+    description: 'Deep, cinematic movie trailer voiceover.'
+  }
+};
+
+/**
+ * Apply Style DSP Equalization & Dynamics Processing
+ */
+function applyStyleDSP(inputWav, outputWav, styleName, intensity = 1.0, sampleRate = 24000) {
+  const style = SPEAKING_STYLES[styleName] || SPEAKING_STYLES.neutral;
+  if (!style || !style.dspFilter) {
+    if (inputWav !== outputWav) fs.copyFileSync(inputWav, outputWav);
+    return outputWav;
+  }
+
+  const safeInt = Math.max(0.1, Math.min(2.0, parseFloat(intensity) || 1.0));
+  const filters = [];
+
+  switch (style.dspFilter) {
+    case 'broadcast_news': {
+      const g = (3.5 * safeInt).toFixed(1);
+      const bassCut = (-2.0 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=3200:t=q:w=1.2:g=${g},equalizer=f=120:t=q:w=1.0:g=${bassCut}`);
+      break;
+    }
+    case 'deep_documentary': {
+      const bassBoost = (3.5 * safeInt).toFixed(1);
+      const highCut = (-2.5 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=110:t=q:w=0.8:g=${bassBoost},equalizer=f=6000:t=q:w=1.0:g=${highCut}`);
+      break;
+    }
+    case 'warm_story': {
+      const warm = (2.2 * safeInt).toFixed(1);
+      const air = (1.5 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=220:t=q:w=1.0:g=${warm},equalizer=f=4500:t=q:w=1.2:g=${air}`);
+      break;
+    }
+    case 'energetic_punch': {
+      const punch = (3.0 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=2800:t=q:w=1.0:g=${punch},compand=attacks=0.01:decays=0.08:points=-40/-40|-18/-10|0/-1.5`);
+      break;
+    }
+    case 'melancholy': {
+      const atten = (-4.0 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=5000:t=q:w=0.8:g=${atten},equalizer=f=300:t=q:w=1.0:g=-1.5`);
+      break;
+    }
+    case 'whisper_soft': {
+      const air = (4.0 * safeInt).toFixed(1);
+      filters.push(`highpass=f=280,equalizer=f=6500:t=q:w=1.0:g=${air}`);
+      break;
+    }
+    case 'calm_silk': {
+      const roll = (-3.0 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=7000:t=q:w=1.0:g=${roll},equalizer=f=250:t=q:w=1.0:g=1.5`);
+      break;
+    }
+    case 'cinematic_trailer': {
+      const sub = (4.5 * safeInt).toFixed(1);
+      const pres = (2.5 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=85:t=q:w=0.8:g=${sub},equalizer=f=3500:t=q:w=1.0:g=${pres}`);
+      break;
+    }
+    case 'clarity': {
+      const clar = (2.5 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=3500:t=q:w=1.0:g=${clar}`);
+      break;
+    }
+    default:
+      break;
+  }
+
+  if (filters.length === 0) {
+    if (inputWav !== outputWav) fs.copyFileSync(inputWav, outputWav);
+    return outputWav;
+  }
+
+  const tempOut = outputWav + '.dsp.tmp.wav';
+  try {
+    execFileSync('ffmpeg.exe', [
+      '-y', '-i', inputWav,
+      '-af', filters.join(','),
+      '-c:a', 'pcm_s16le',
+      '-ar', String(sampleRate),
+      tempOut
+    ]);
+    if (fs.existsSync(tempOut) && fs.statSync(tempOut).size > 100) {
+      if (fs.existsSync(outputWav) && inputWav === outputWav) fs.unlinkSync(outputWav);
+      fs.renameSync(tempOut, outputWav);
+      return outputWav;
+    }
+  } catch (e) {
+    console.warn('[NeuralEngine] Style DSP filter fallback:', e.message);
+    try { if (fs.existsSync(tempOut)) fs.unlinkSync(tempOut); } catch (_) {}
+  }
+  if (inputWav !== outputWav && !fs.existsSync(outputWav)) {
+    fs.copyFileSync(inputWav, outputWav);
+  }
+  return outputWav;
+}
+
+/**
+ * 7. Native Speech Inference Dispatcher
  */
 async function synthesizeSpeech(text, voiceId, outputPath, options = {}) {
   const speed = Math.max(0.5, Math.min(parseFloat(options.speed) || 1.0, 2.0));
   const volume = Math.max(0.1, Math.min(parseFloat(options.volume) || 1.0, 2.5));
-  const cleanText = text.trim();
+  const styleName = (options.style || 'neutral').toLowerCase();
+  const styleIntensity = Math.max(0.1, Math.min(2.0, parseFloat(options.style_intensity || options.styleIntensity) || 1.0));
+  const styleConfig = SPEAKING_STYLES[styleName] || SPEAKING_STYLES.neutral;
+
+  let cleanText = text.trim();
   if (!cleanText) throw new Error('Empty text received for speech synthesis.');
+
+  // Apply custom pronunciation dictionary if provided
+  if (options.pronunciations && typeof options.pronunciations === 'object') {
+    for (const [w, repl] of Object.entries(options.pronunciations)) {
+      if (w && repl) {
+        const reg = new RegExp(`\\b${w.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'gi');
+        cleanText = cleanText.replace(reg, repl);
+      }
+    }
+  }
 
   // A. Custom Cloned Voice
   if (voiceId.startsWith('custom_')) {
-    return await synthesizeClonedVoice(cleanText, voiceId, outputPath, speed, { ...options, volume });
+    const rawOut = outputPath + '.raw.wav';
+    await synthesizeClonedVoice(cleanText, voiceId, rawOut, speed, { ...options, volume, styleConfig });
+    applyStyleDSP(rawOut, outputPath, styleName, styleIntensity, 24000);
+    try { if (fs.existsSync(rawOut)) fs.unlinkSync(rawOut); } catch (_) {}
+    return outputPath;
   }
 
   // B. Meta MMS Gujarati Voice
   if (voiceId === 'mms-gu-vits' || voiceId.includes('gujarati') || voiceId.includes('gu-')) {
-    return await synthesizeGujaratiMms(cleanText, outputPath, speed, volume);
+    const rawOut = outputPath + '.raw.wav';
+    await synthesizeGujaratiMms(cleanText, rawOut, speed, volume);
+    applyStyleDSP(rawOut, outputPath, styleName, styleIntensity, 16000);
+    try { if (fs.existsSync(rawOut)) fs.unlinkSync(rawOut); } catch (_) {}
+    return outputPath;
   }
 
   // C. Piper Hindi Voice
-  if (voiceId === 'piper-hi-pratham' || voiceId === 'hi_IN-pratham-medium' || voiceId.includes('hi-')) {
-    return await synthesizePiperHindi(cleanText, outputPath, speed, volume);
+  if (voiceId === 'piper-hi-pratham' || voiceId === 'hi_IN-pratham-medium' || voiceId === 'piper-hi_IN-pratham-medium') {
+    const rawOut = outputPath + '.raw.wav';
+    await synthesizePiperHindi(cleanText, rawOut, speed, volume, styleConfig);
+    applyStyleDSP(rawOut, outputPath, styleName, styleIntensity, 22050);
+    try { if (fs.existsSync(rawOut)) fs.unlinkSync(rawOut); } catch (_) {}
+    return outputPath;
   }
 
-  // D. Piper English Voice (e.g. en_US-lessac-medium)
-  if (voiceId === 'piper-en-lessac' || voiceId === 'en_US-lessac-medium' || voiceId.startsWith('piper-')) {
-    return await synthesizePiperEnglish(cleanText, outputPath, speed, voiceId, volume);
+  // D. Piper Model Voice (dynamically resolved by model ID)
+  if (voiceId.startsWith('piper-') || voiceId.includes('piper') || voiceId.includes('lessac')) {
+    let modelBaseName = voiceId.replace(/^piper-/, '');
+    if (modelBaseName === 'en-lessac') modelBaseName = 'en_US-lessac-medium';
+    if (modelBaseName === 'hi-pratham') modelBaseName = 'hi_IN-pratham-medium';
+
+    const rawOut = outputPath + '.raw.wav';
+    await synthesizePiperModel(cleanText, rawOut, speed, modelBaseName, volume, styleConfig);
+    applyStyleDSP(rawOut, outputPath, styleName, styleIntensity, 22050);
+    try { if (fs.existsSync(rawOut)) fs.unlinkSync(rawOut); } catch (_) {}
+    return outputPath;
   }
 
   // E. Kokoro-82M Voices (af_*, am_*, bf_*, bm_*)
-  return await synthesizeKokoro(cleanText, voiceId, outputPath, speed, volume);
+  const rawOut = outputPath + '.raw.wav';
+  await synthesizeKokoro(cleanText, voiceId, rawOut, speed, volume, styleConfig);
+  applyStyleDSP(rawOut, outputPath, styleName, styleIntensity, 24000);
+  try { if (fs.existsSync(rawOut)) fs.unlinkSync(rawOut); } catch (_) {}
+  return outputPath;
 }
 
 /**
  * Synthesize with Kokoro-82M
  */
-async function synthesizeKokoro(text, voiceId, outputPath, speed = 1.0, volume = 1.0) {
+async function synthesizeKokoro(text, voiceId, outputPath, speed = 1.0, volume = 1.0, styleConfig = null) {
   const tts = await getKokoro();
   
   // Normalize voice ID
@@ -280,10 +580,13 @@ async function synthesizeKokoro(text, voiceId, outputPath, speed = 1.0, volume =
     validVoice = match || 'af_heart';
   }
 
-  console.log(`[NeuralEngine] Kokoro synthesizing (${validVoice}, speed=${speed}, volume=${volume}): "${text.slice(0, 40)}..."`);
+  // Effective speed combined with style prosody
+  const effectiveSpeed = Math.max(0.5, Math.min(2.0, speed * (styleConfig?.speedMultiplier || 1.0)));
+
+  console.log(`[NeuralEngine] Kokoro synthesizing (${validVoice}, speed=${effectiveSpeed.toFixed(2)}, volume=${volume}): "${text.slice(0, 40)}..."`);
   const rawAudio = await tts.generate(text, {
     voice: validVoice,
-    speed: speed
+    speed: effectiveSpeed
   });
 
   // rawAudio contains audio (Float32Array) and sampling_rate (24000)
@@ -293,11 +596,22 @@ async function synthesizeKokoro(text, voiceId, outputPath, speed = 1.0, volume =
 }
 
 /**
- * Synthesize with Piper English (en_US-lessac-medium)
+ * Synthesize with Piper Dynamic ONNX Model
  */
-async function synthesizePiperEnglish(text, outputPath, speed = 1.0, voiceId = 'en_US-lessac-medium', volume = 1.0) {
-  const modelName = voiceId.includes('lessac') ? 'en_US-lessac-medium' : 'en_US-lessac-medium';
-  const { session, config } = await getPiperSession(modelName);
+async function synthesizePiperModel(text, outputPath, speed = 1.0, modelBaseName = 'en_US-lessac-medium', volume = 1.0, styleConfig = null) {
+  const modelPath = path.join(PIPER_DIR, `${modelBaseName}.onnx`);
+  const configPath = path.join(PIPER_DIR, `${modelBaseName}.onnx.json`);
+
+  if (!fs.existsSync(modelPath) || !fs.existsSync(configPath)) {
+    throw new Error(`Piper voice model "${modelBaseName}" is not installed locally on disk. Only installed models (en_US-lessac-medium, hi_IN-pratham-medium) can synthesize speech.`);
+  }
+
+  // Delegate Hindi models to dedicated phonemizer
+  if (modelBaseName.startsWith('hi_') || modelBaseName.includes('pratham')) {
+    return await synthesizePiperHindi(text, outputPath, speed, volume, styleConfig);
+  }
+
+  const { session, config } = await getPiperSession(modelBaseName);
 
   const map = config.phoneme_id_map;
   const tokens = [map['^'][0]];
@@ -310,10 +624,15 @@ async function synthesizePiperEnglish(text, outputPath, speed = 1.0, voiceId = '
   tokens.push(map['_'][0]);
   tokens.push(map['$'][0]);
 
-  const lengthScale = 1.0 / speed;
+  // Modulate VITS flow scales based on style config
+  const noiseScale = styleConfig?.piperNoiseScale || 0.667;
+  const effectiveSpeed = speed * (styleConfig?.speedMultiplier || 1.0);
+  const lengthScale = 1.0 / effectiveSpeed;
+  const noiseW = styleConfig?.piperNoiseW || 0.8;
+
   const inputTensor = new ort.Tensor('int64', BigInt64Array.from(tokens.map(t => BigInt(t))), [1, tokens.length]);
   const inputLengths = new ort.Tensor('int64', BigInt64Array.from([BigInt(tokens.length)]), [1]);
-  const scales = new ort.Tensor('float32', Float32Array.from([0.667, lengthScale, 0.8]), [3]);
+  const scales = new ort.Tensor('float32', Float32Array.from([noiseScale, lengthScale, noiseW]), [3]);
 
   const results = await session.run({
     input: inputTensor,
@@ -322,7 +641,7 @@ async function synthesizePiperEnglish(text, outputPath, speed = 1.0, voiceId = '
   });
 
   const pcmData = results.output.data;
-  const sampleRate = config.audio.sample_rate || 22050;
+  const sampleRate = config.audio?.sample_rate || 22050;
   const wavBuffer = floatTo16BitPcmWav(pcmData, sampleRate, volume);
   fs.writeFileSync(outputPath, wavBuffer);
   return outputPath;
@@ -331,7 +650,7 @@ async function synthesizePiperEnglish(text, outputPath, speed = 1.0, voiceId = '
 /**
  * Synthesize with Piper Hindi (hi_IN-pratham-medium)
  */
-async function synthesizePiperHindi(text, outputPath, speed = 1.0, volume = 1.0) {
+async function synthesizePiperHindi(text, outputPath, speed = 1.0, volume = 1.0, styleConfig = null) {
   const { session, config } = await getPiperSession('hi_IN-pratham-medium');
   const ipa = devanagariToIpa(text);
   console.log(`[NeuralEngine] Piper Hindi: "${text}" -> IPA: "${ipa}"`);
@@ -347,10 +666,14 @@ async function synthesizePiperHindi(text, outputPath, speed = 1.0, volume = 1.0)
   tokens.push(map['_'][0]);
   tokens.push(map['$'][0]);
 
-  const lengthScale = 1.0 / speed;
+  const noiseScale = styleConfig?.piperNoiseScale || 0.667;
+  const effectiveSpeed = speed * (styleConfig?.speedMultiplier || 1.0);
+  const lengthScale = 1.0 / effectiveSpeed;
+  const noiseW = styleConfig?.piperNoiseW || 0.8;
+
   const inputTensor = new ort.Tensor('int64', BigInt64Array.from(tokens.map(t => BigInt(t))), [1, tokens.length]);
   const inputLengths = new ort.Tensor('int64', BigInt64Array.from([BigInt(tokens.length)]), [1]);
-  const scales = new ort.Tensor('float32', Float32Array.from([0.667, lengthScale, 0.8]), [3]);
+  const scales = new ort.Tensor('float32', Float32Array.from([noiseScale, lengthScale, noiseW]), [3]);
 
   const results = await session.run({
     input: inputTensor,
@@ -359,7 +682,7 @@ async function synthesizePiperHindi(text, outputPath, speed = 1.0, volume = 1.0)
   });
 
   const pcmData = results.output.data;
-  const sampleRate = config.audio.sample_rate || 22050;
+  const sampleRate = config.audio?.sample_rate || 22050;
   const wavBuffer = floatTo16BitPcmWav(pcmData, sampleRate, volume);
   fs.writeFileSync(outputPath, wavBuffer);
   return outputPath;
@@ -500,11 +823,62 @@ function analyzeAudioFile(filePath) {
         score = 98;
       }
 
+      // Real F0 fundamental pitch estimation via autocorrelation on 8kHz mono PCM
+      let estimatedF0 = 160.0;
+      try {
+        const rawPcm = execFileSync('ffmpeg.exe', [
+          '-y', '-i', filePath,
+          '-ar', '8000',
+          '-ac', '1',
+          '-f', 's16le',
+          '-t', '5',
+          '-'
+        ], { maxBuffer: 10 * 1024 * 1024 });
+
+        const numSamples = rawPcm.length / 2;
+        const samples = new Float32Array(numSamples);
+        for (let i = 0; i < numSamples; i++) {
+          samples[i] = rawPcm.readInt16LE(i * 2) / 32768.0;
+        }
+
+        const minLag = 23; // 8000 / 350 Hz
+        const maxLag = 114; // 8000 / 70 Hz
+        let bestLag = 0;
+        let maxCorr = 0;
+        const windowSize = Math.min(4000, numSamples - maxLag);
+        if (windowSize > 500) {
+          for (let lag = minLag; lag <= maxLag; lag++) {
+            let corr = 0, normA = 0, normB = 0;
+            for (let i = 0; i < windowSize; i++) {
+              const a = samples[i], b = samples[i + lag];
+              corr += a * b; normA += a * a; normB += b * b;
+            }
+            const r = corr / (Math.sqrt(normA * normB) || 1e-6);
+            if (r > maxCorr) { maxCorr = r; bestLag = lag; }
+          }
+          if (maxCorr > 0.40 && bestLag > 0) {
+            estimatedF0 = Math.round(8000 / bestLag);
+          }
+        }
+      } catch (f0Err) {
+        // Fallback default mid pitch
+      }
+
+      const detectedGender = estimatedF0 < 155 ? 'Male' : 'Female';
+      const baseF0 = detectedGender === 'Male' ? 115.0 : 205.0;
+      const pitchBias = Number((12.0 * Math.log2(estimatedF0 / baseF0)).toFixed(2));
+      const clampedBias = Math.max(-4.0, Math.min(4.0, pitchBias));
+      const formantShift = Number((Math.pow(2.0, clampedBias / 24.0)).toFixed(3));
+
       resolve({
         duration_seconds: Math.round(duration * 100) / 100,
         peak_level_db: Math.round(peakDb * 10) / 10,
         rms_level_db: Math.round(rmsDb * 10) / 10,
         estimated_snr_db: Math.round(snrDb * 10) / 10,
+        estimated_f0_hz: estimatedF0,
+        detected_gender: detectedGender,
+        pitch_semitone_bias: clampedBias,
+        formant_shift: formantShift,
         is_clipped: isClipped,
         quality_rating: rating,
         feedback: feedback,
@@ -578,6 +952,7 @@ function getSystemHardwareTelemetry() {
 }
 
 module.exports = {
+  SPEAKING_STYLES,
   getKokoro,
   getPiperSession,
   getMmsGujarati,
@@ -586,7 +961,8 @@ module.exports = {
   floatTo16BitPcmWav,
   synthesizeSpeech,
   synthesizeKokoro,
-  synthesizePiperEnglish,
+  synthesizePiperModel,
+  synthesizePiperEnglish: (text, out, spd, vid, vol) => synthesizePiperModel(text, out, spd, vid?.replace(/^piper-/, '') || 'en_US-lessac-medium', vol),
   synthesizePiperHindi,
   synthesizeGujaratiMms,
   synthesizeClonedVoice,
