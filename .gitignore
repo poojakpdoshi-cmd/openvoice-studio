@@ -8,5 +8,7 @@ storage/custom_voices/*
 !storage/custom_voices/.gitkeep
 storage/openvoice.db
 storage/temp*
+storage/test_procedural_output/
+storage/procedural/*
 .DS_Store
 Thumbs.db

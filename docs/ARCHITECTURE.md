@@ -227,3 +227,56 @@ CREATE TABLE IF NOT EXISTS pronunciations (
    * **FLAC:** Free Lossless Audio Codec (compression level 5, 24-bit support).
    * Built-in ID3/RIFF metadata tagger: adds `Artist: OpenVoice Studio`, `Title`, and an invisible safety disclosure tag: `AI_VOICE_STUDIO_GENERATED: true`.
 
+---
+
+## 5. Zero-Model Procedural Audio & Music Synthesis Engine
+
+OpenVoice Studio includes a dedicated zero-model procedural audio generation engine (`backend/procedural_engine.js`) that operates completely independently of neural network weights, cloud APIs, and external sample libraries. All sound waves are computed on-the-fly via mathematical functions and digital signal processing algorithms.
+
+### 5.1 Mathematical DSP Foundations
+* **Oscillators**: Continuous-phase mathematical functions for Sine ($\sin(2\pi ft)$), Square with pulse-width duty modulation ($D \in [0.1, 0.9]$), Sawtooth ($2(p \bmod 1) - 1$), Triangle ($2|2(p \bmod 1) - 1| - 1$), and White Noise ($\mathcal{U}(-1, 1)$).
+* **Pink Noise (Voss-McCartney Algorithm)**: 3-pole IIR filter network providing a $1/f$ spectral roll-off (-3 dB/octave) for natural acoustic whooshes and wind simulation.
+* **ADSR Envelope Generator**: Piecewise linear attack, exponential decay, sustain plateau, and linear release curves with millisecond precision.
+* **Biquad State-Variable Filter**: Second-order IIR filters supporting Lowpass, Highpass, and Bandpass topologies with configurable cutoff frequency $f_c$ and resonance $Q$.
+* **Algorithmic Freeverb Network**: Classic Schroeder reverberator implementation combining 8 parallel feedback comb filters with damping low-pass filters and 4 series allpass delay stages for diffuse spatial decay without pre-recorded impulse responses.
+* **Distortion & Saturation**: Hyperbolic tangent ($\tanh(x \cdot \text{drive})$) soft-clipping for analog warmth, hard clipping, and 16-step bitcrushing for lo-fi aesthetics.
+* **Master Limiter & Normalizer**: Lookahead peak scanner with soft-tanh saturation threshold preventing digital clipping at -1.0 dBFS.
+
+### 5.2 16 Procedural Sound Effects
+| Preset Key | Acoustic Architecture | Primary Use Case |
+|---|---|---|
+| `cartoon_boing` | Exponential sine frequency glide with vibrato LFO modulation | Comedic cartoon bounce |
+| `funny_pop` | High-to-low fast logarithmic frequency snap (850Hz → 90Hz) | Bubble pops, button clicks |
+| `punch_impact` | 160Hz sine sweep + filtered pink noise transient + tanh drive | Comic combat impacts |
+| `falling_sound` | Exponential whistle descent with 16Hz vibrato oscillation | Cartoon falling whistles |
+| `record_scratch` | Oscillating bandpass filter sweep over noise burst | Turntable DJ stops |
+| `bass_drop` | 808-style pure exponential sub-sweep (140Hz → 30Hz) | Modern meme drops & EDM drops |
+| `dramatic_impact` | Low sub boom (90Hz → 38Hz) layered with detuned C2 brass | Cinematic movie hits |
+| `whoosh` | Symmetric bandpass filter sweep (200Hz → 3800Hz → 200Hz) | Transition swooshes |
+| `glitch` | Stepped random frequency square wave with bitcrushing | Digital error & static |
+| `riser` | Quadratic frequency rise (80Hz → 1800Hz) with accelerating LFO | Tension buildups |
+| `suspense_effect` | Dissonant minor 2nd cluster (E3, F3, Bb3) with tremolo & reverb | Horror & suspense cues |
+| `retro_coin` | Rapid 2-tone square wave arpeggio (B5 → E6) | 8-bit game pickups |
+| `retro_jump` | Upward chirped square wave (150Hz → 650Hz in 140ms) | 8-bit retro jumps |
+| `retro_laser` | Fast downward sawtooth chirp (950Hz → 90Hz in 130ms) | Arcade sci-fi zaps |
+| `notification_chime`| Major triad harmonic bell (C6, E6, G6) with natural decay | UI chimes & alerts |
+| `comedic_transition`| Descending 4-tone brass ("wah-wah-wah-waaah") with pitch sag | Fail cues & punchlines |
+
+### 5.3 9 Procedural Music Composition Genres
+* **Algorithmic Drum Machine (`SynthDrums`)**: Synthesized kick (sine sweep 140Hz → 42Hz + soft clip), snare (185Hz body tone + 1.8kHz bandpass noise burst), and closed/open hi-hats (6.5kHz–7.0kHz highpass filtered noise).
+* **Music Genres**:
+  1. `8bit_retro` (136 BPM): Fast 16th-note pulse arpeggios, triangle bassline, 8-bit drum beats.
+  2. `electronic` (124 BPM): 4-on-the-floor kick, offbeat open hat, 16th-note saw bassline, synth pluck.
+  3. `comedy` (120 BPM): Oompah bass bounce (1-5), syncopated ragtime triangle chord stabs.
+  4. `suspense` (72 BPM): Heartbeat sub-kick, detuned low drone, eerie dissonant high cluster pings with Freeverb.
+  5. `cinematic` (90 BPM): Taiko sub booms, marching snare rolls, driving staccato strings ostinato, sustained brass chords.
+  6. `ambient` (60 BPM): Lush evolving warm pad chords (Maj7/9), generative sparse crystalline pentatonic chimes.
+  7. `happy` (128 BPM): Upbeat pop drums, walking bassline, cheerful syncopated bell melody.
+  8. `dramatic` (80 BPM): Heavy sub impacts, harmonic minor arpeggios, brass stabs, timpani crescendo rolls.
+  9. `minimal` (88 BPM): Lo-fi subtle sub pulse, delicate Rhodes-like sine chords, micro-percussion clicks.
+
+### 5.4 Multitrack Meme Audio Studio
+* **4-Stem Timeline Mixer**: Supports dynamic layering of synthetic speech stems, procedural music tracks, and primary/secondary sound effects.
+* **Volume Staging & Delay Offsets**: Configurable track-level gain ($0.0\times$ to $2.0\times$) and millisecond timeline offsets.
+* **Audio Export Engine**: Seamless mixdown and mastering to broadcast WAV and MP3 (libmp3lame 256 kbps).
+

@@ -126,3 +126,4 @@ module.exports = { VOICE_CATALOG };
 
 fs.writeFileSync(path.join(__dirname, 'catalog.js'), code, 'utf8');
 console.log(`[BuildCatalog] Wrote ${ALL_VOICES.length} verified voices into backend/catalog.js!`);
+

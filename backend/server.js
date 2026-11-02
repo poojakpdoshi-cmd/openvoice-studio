@@ -20,6 +20,7 @@ const crypto = require('node:crypto');
 const os = require('node:os');
 
 const neuralEngine = require('./neural_engine');
+const proceduralEngine = require('./procedural_engine');
 const { VOICE_CATALOG } = require('./catalog');
 
 const PORT = process.env.PORT || 8000;
@@ -747,6 +748,178 @@ const server = http.createServer(async (req, res) => {
         file_name: outName,
         format: fmt,
         sample_rate: sr
+      });
+    }
+
+    // 9B. Procedural Audio Engine (Zero-Model SFX & Procedural Music)
+    if (pathname === '/api/procedural/presets' && method === 'GET') {
+      return sendJson(200, {
+        sfx_presets: Object.keys(proceduralEngine.SoundEffectGenerators).map(k => ({
+          id: k,
+          name: k.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+        })),
+        music_genres: [
+          { id: '8bit_retro', name: '8-Bit Retro / Chiptune', default_bpm: 136 },
+          { id: 'electronic', name: 'Electronic / Synthwave', default_bpm: 124 },
+          { id: 'comedy', name: 'Comedy / Oompah Bounce', default_bpm: 120 },
+          { id: 'suspense', name: 'Dark Suspense / Tension', default_bpm: 72 },
+          { id: 'cinematic', name: 'Cinematic / Epic Orchestral', default_bpm: 90 },
+          { id: 'ambient', name: 'Ambient Soundscape', default_bpm: 60 },
+          { id: 'happy', name: 'Happy / Upbeat Groove', default_bpm: 128 },
+          { id: 'dramatic', name: 'Dramatic / Dark Crescendo', default_bpm: 80 },
+          { id: 'minimal', name: 'Minimal Background', default_bpm: 88 }
+        ],
+        scales: ['major', 'minor', 'pentatonic_major', 'pentatonic_minor', 'blues', 'dorian'],
+        keys: ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+      });
+    }
+
+    if (pathname === '/api/procedural/sfx' && method === 'POST') {
+      const body = await getBody();
+      const preset = body.preset || 'cartoon_boing';
+      const genFn = proceduralEngine.SoundEffectGenerators[preset] || proceduralEngine.SoundEffectGenerators.cartoon_boing;
+
+      let buffer = genFn(body.params || {});
+
+      // Sound design customization filters
+      if (body.distortion && parseFloat(body.distortion) > 1.0) {
+        buffer = proceduralEngine.applyDistortion(buffer, parseFloat(body.distortion), body.distortion_mode || 'soft');
+      }
+      if (body.filter_cutoff) {
+        const filter = new proceduralEngine.BiquadFilter(body.filter_type || 'lowpass', parseFloat(body.filter_cutoff), parseFloat(body.filter_q || 1.0));
+        buffer = filter.processBuffer(buffer);
+      }
+      if (body.delay_ms && parseFloat(body.delay_ms) > 0) {
+        buffer = proceduralEngine.applyDelay(buffer, proceduralEngine.SAMPLE_RATE, parseFloat(body.delay_ms), parseFloat(body.delay_feedback || 0.3));
+      }
+      if (body.reverb_wet && parseFloat(body.reverb_wet) > 0) {
+        const verb = new proceduralEngine.AlgorithmicReverb();
+        buffer = verb.process(buffer, parseFloat(body.reverb_wet));
+      }
+
+      buffer = proceduralEngine.normalizeAndLimit(buffer, -1.0);
+      const wavBuffer = proceduralEngine.floatToWavBuffer(buffer, proceduralEngine.SAMPLE_RATE);
+      const sfxId = `sfx_${preset}_${crypto.randomBytes(4).toString('hex')}.wav`;
+      const sfxPath = path.join(AUDIO_DIR, sfxId);
+      fs.writeFileSync(sfxPath, wavBuffer);
+
+      const quality = await neuralEngine.analyzeAudioFile(sfxPath);
+      return sendJson(200, {
+        id: sfxId,
+        preset: preset,
+        audio_url: `/api/audio/file/${sfxId}`,
+        file_name: sfxId,
+        duration_seconds: quality.duration_seconds,
+        quality: quality,
+        sample_rate: proceduralEngine.SAMPLE_RATE
+      });
+    }
+
+    if (pathname === '/api/procedural/music' && method === 'POST') {
+      const body = await getBody();
+      const genre = body.genre || '8bit_retro';
+      const bpm = parseInt(body.bpm || 120, 10);
+      const duration = Math.max(3.0, Math.min(parseFloat(body.duration || 12.0), 120.0));
+      const key = body.key || 'C';
+
+      const buffer = proceduralEngine.generateProceduralMusic({
+        genre,
+        bpm,
+        durationSeconds: duration,
+        key,
+        sampleRate: proceduralEngine.SAMPLE_RATE
+      });
+
+      const wavBuffer = proceduralEngine.floatToWavBuffer(buffer, proceduralEngine.SAMPLE_RATE);
+      const musicId = `music_${genre}_${crypto.randomBytes(4).toString('hex')}.wav`;
+      const musicPath = path.join(AUDIO_DIR, musicId);
+      fs.writeFileSync(musicPath, wavBuffer);
+
+      const quality = await neuralEngine.analyzeAudioFile(musicPath);
+      return sendJson(200, {
+        id: musicId,
+        genre: genre,
+        bpm: bpm,
+        key: key,
+        audio_url: `/api/audio/file/${musicId}`,
+        file_name: musicId,
+        duration_seconds: quality.duration_seconds,
+        quality: quality,
+        sample_rate: proceduralEngine.SAMPLE_RATE
+      });
+    }
+
+    if (pathname === '/api/procedural/prompt' && method === 'POST') {
+      const body = await getBody();
+      const prompt = (body.prompt || '').trim();
+      if (!prompt) return sendJson(400, { detail: 'Prompt string is required.' });
+
+      const parsed = proceduralEngine.parseProceduralPrompt(prompt);
+      let buffer, filename;
+
+      if (parsed.type === 'music') {
+        buffer = proceduralEngine.generateProceduralMusic({
+          genre: parsed.genre,
+          bpm: parsed.bpm,
+          durationSeconds: parsed.durationSeconds || 12.0,
+          key: parsed.key,
+          sampleRate: proceduralEngine.SAMPLE_RATE
+        });
+        filename = `prompt_music_${parsed.genre}_${crypto.randomBytes(4).toString('hex')}.wav`;
+      } else {
+        const fn = proceduralEngine.SoundEffectGenerators[parsed.preset] || proceduralEngine.SoundEffectGenerators.cartoon_boing;
+        buffer = fn();
+        filename = `prompt_sfx_${parsed.preset}_${crypto.randomBytes(4).toString('hex')}.wav`;
+      }
+
+      buffer = proceduralEngine.normalizeAndLimit(buffer, -1.0);
+      const wavBuffer = proceduralEngine.floatToWavBuffer(buffer, proceduralEngine.SAMPLE_RATE);
+      const outPath = path.join(AUDIO_DIR, filename);
+      fs.writeFileSync(outPath, wavBuffer);
+
+      const quality = await neuralEngine.analyzeAudioFile(outPath);
+      return sendJson(200, {
+        parsed_intent: parsed,
+        audio_url: `/api/audio/file/${filename}`,
+        file_name: filename,
+        duration_seconds: quality.duration_seconds,
+        quality: quality
+      });
+    }
+
+    // 9C. Meme Audio Studio Multitrack Mixer
+    if (pathname === '/api/meme/mix' && method === 'POST') {
+      const body = await getBody();
+      const tracks = body.tracks || [];
+      if (tracks.length === 0) return sendJson(400, { detail: 'At least one track required for mixing.' });
+
+      const mixId = `meme_${crypto.randomBytes(5).toString('hex')}`;
+      const format = (body.format || 'wav').toLowerCase();
+      const outPath = path.join(AUDIO_DIR, `${mixId}.${format}`);
+
+      // Resolve relative file_name to absolute storage path
+      for (const tr of tracks) {
+        if (tr.file_name && !tr.file_path) {
+          tr.file_path = path.join(AUDIO_DIR, path.basename(tr.file_name));
+        }
+      }
+
+      const mixResult = await proceduralEngine.renderMultitrackMix({
+        tracks,
+        outputPath: outPath,
+        format,
+        sampleRate: proceduralEngine.SAMPLE_RATE
+      });
+
+      const quality = await neuralEngine.analyzeAudioFile(outPath);
+      return sendJson(200, {
+        id: mixId,
+        file_name: path.basename(outPath),
+        audio_url: `/api/audio/file/${path.basename(outPath)}`,
+        duration_seconds: quality.duration_seconds,
+        track_count: mixResult.trackCount,
+        format: format,
+        quality: quality
       });
     }
 
