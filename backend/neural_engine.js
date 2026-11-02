@@ -242,7 +242,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.667,
     piperNoiseW: 0.8,
     dspFilter: null,
-    description: 'Balanced, neutral speaking tone.'
+    mechanism: 'native_reference',
+    description: 'Balanced, neutral speaking tone (unmodified model reference).'
   },
   conversational: {
     speedMultiplier: 1.02,
@@ -250,7 +251,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.72,
     piperNoiseW: 0.85,
     dspFilter: 'conversational',
-    description: 'Natural cadence with conversational prosody.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Natural cadence with conversational prosody and slight presence.'
   },
   professional: {
     speedMultiplier: 0.98,
@@ -258,7 +260,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.62,
     piperNoiseW: 0.75,
     dspFilter: 'clarity',
-    description: 'Clear, authoritative corporate presentation tone.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Clear, authoritative corporate presentation tone with presence EQ.'
   },
   news: {
     speedMultiplier: 1.06,
@@ -266,7 +269,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.58,
     piperNoiseW: 0.75,
     dspFilter: 'broadcast_news',
-    description: 'Crisply articulated broadcast journalism style.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Crisply articulated broadcast journalism style with 3.2kHz presence.'
   },
   documentary: {
     speedMultiplier: 0.92,
@@ -274,7 +278,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.64,
     piperNoiseW: 0.78,
     dspFilter: 'deep_documentary',
-    description: 'Measured, contemplative documentary narration.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Measured, contemplative narration with deep chest resonance.'
   },
   storytelling: {
     speedMultiplier: 0.95,
@@ -282,7 +287,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.75,
     piperNoiseW: 0.88,
     dspFilter: 'warm_story',
-    description: 'Expressive audiobook delivery with dynamic cadence.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Expressive audiobook delivery with dynamic cadence and warm low-mids.'
   },
   energetic: {
     speedMultiplier: 1.15,
@@ -290,7 +296,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.80,
     piperNoiseW: 0.95,
     dspFilter: 'energetic_punch',
-    description: 'Upbeat, high-energy presentation tone.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Upbeat, high-energy presentation tone with punchy companding.'
   },
   excited: {
     speedMultiplier: 1.18,
@@ -298,6 +305,7 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.85,
     piperNoiseW: 1.0,
     dspFilter: 'energetic_punch',
+    mechanism: 'prosodic_dsp_hybrid',
     description: 'Vibrant, excited delivery with bright pitch inflections.'
   },
   happy: {
@@ -306,7 +314,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.75,
     piperNoiseW: 0.88,
     dspFilter: 'conversational',
-    description: 'Cheerful, optimistic tone.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Cheerful, optimistic tone with uplifted phrasing.'
   },
   sad: {
     speedMultiplier: 0.85,
@@ -314,7 +323,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.45,
     piperNoiseW: 0.60,
     dspFilter: 'melancholy',
-    description: 'Somber, subdued cadence with softer dynamics.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Somber, subdued cadence with softened high-frequencies.'
   },
   angry: {
     speedMultiplier: 1.12,
@@ -322,7 +332,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.88,
     piperNoiseW: 1.05,
     dspFilter: 'intense_drive',
-    description: 'Intense, assertive delivery with forceful articulation.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Intense, assertive delivery with forceful articulation and 2.4kHz bite.'
   },
   serious: {
     speedMultiplier: 0.94,
@@ -330,7 +341,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.52,
     piperNoiseW: 0.70,
     dspFilter: 'clarity',
-    description: 'Grave, restrained vocal delivery.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Grave, restrained vocal delivery with lowered pitch and focused presence.'
   },
   curious: {
     speedMultiplier: 1.04,
@@ -338,6 +350,7 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.76,
     piperNoiseW: 0.90,
     dspFilter: null,
+    mechanism: 'prosody_controlled',
     description: 'Inquisitive intonation with lively sentence-ending inflection.'
   },
   sarcastic: {
@@ -346,7 +359,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.70,
     piperNoiseW: 0.95,
     dspFilter: null,
-    description: 'Dry, drawn-out cadence with wry inflections.'
+    mechanism: 'prosody_controlled',
+    description: 'Dry, drawn-out cadence with wry pitch inflection.'
   },
   dramatic: {
     speedMultiplier: 0.88,
@@ -354,6 +368,7 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.78,
     piperNoiseW: 0.95,
     dspFilter: 'deep_documentary',
+    mechanism: 'prosodic_dsp_hybrid',
     description: 'Theatrical, intense pauses with deep resonance.'
   },
   suspenseful: {
@@ -362,6 +377,7 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.82,
     piperNoiseW: 0.85,
     dspFilter: 'whisper_soft',
+    mechanism: 'prosodic_dsp_hybrid',
     description: 'Tense, breathless pacing with prolonged pauses.'
   },
   calm: {
@@ -370,6 +386,7 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.35,
     piperNoiseW: 0.55,
     dspFilter: 'calm_silk',
+    mechanism: 'prosodic_dsp_hybrid',
     description: 'Serene, rhythmic delivery for meditation and relaxation.'
   },
   whispering: {
@@ -378,7 +395,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.95,
     piperNoiseW: 0.70,
     dspFilter: 'whisper_soft',
-    description: 'Intimate, breathy delivery with suppressed vocal cords.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Intimate, breathy delivery with de-voiced low-end and high air presence.'
   },
   comedy: {
     speedMultiplier: 1.12,
@@ -386,6 +404,7 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.82,
     piperNoiseW: 0.98,
     dspFilter: 'energetic_punch',
+    mechanism: 'prosodic_dsp_hybrid',
     description: 'Punchy, dynamic comic timing with animated pitch.'
   },
   cinematic: {
@@ -394,7 +413,8 @@ const SPEAKING_STYLES = {
     piperNoiseScale: 0.72,
     piperNoiseW: 0.92,
     dspFilter: 'cinematic_trailer',
-    description: 'Deep, cinematic movie trailer voiceover.'
+    mechanism: 'prosodic_dsp_hybrid',
+    description: 'Deep, cinematic movie trailer voiceover with sub-bass proximity warmth.'
   }
 };
 
@@ -440,9 +460,15 @@ function applyStyleDSP(inputWav, outputWav, styleName, intensity = 1.0, sampleRa
       filters.push(`equalizer=f=5000:t=q:w=0.8:g=${atten},equalizer=f=300:t=q:w=1.0:g=-1.5`);
       break;
     }
+    case 'intense_drive': {
+      const bite = (3.5 * safeInt).toFixed(1);
+      const punch = (2.5 * safeInt).toFixed(1);
+      filters.push(`equalizer=f=2400:t=q:w=1.2:g=${bite},equalizer=f=180:t=q:w=0.9:g=${punch},compand=attacks=0.005:decays=0.06:points=-45/-45|-18/-8|0/-1`);
+      break;
+    }
     case 'whisper_soft': {
-      const air = (4.0 * safeInt).toFixed(1);
-      filters.push(`highpass=f=280,equalizer=f=6500:t=q:w=1.0:g=${air}`);
+      const air = (4.5 * safeInt).toFixed(1);
+      filters.push(`highpass=f=340,equalizer=f=6800:t=q:w=1.2:g=${air},compand=attacks=0.02:decays=0.1:points=-50/-30|-20/-14|0/-6`);
       break;
     }
     case 'calm_silk': {

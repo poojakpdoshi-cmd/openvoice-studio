@@ -606,7 +606,7 @@
       </button>
       <button class="nav-btn" onclick="switchTab('cloneTab', this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-4"/><path d="M9 15l3-3 3 3"/></svg>
-        Custom Voice Studio
+        Acoustic Profiler
       </button>
       <button class="nav-btn" onclick="switchTab('editorTab', this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
@@ -740,26 +740,26 @@
                   <span>Speaking Style & Emotion (20 Styles)</span>
                 </div>
                 <select class="select-dropdown" id="styleSelector">
-                  <option value="neutral">Neutral (Balanced Studio Reference)</option>
-                  <option value="conversational" selected>Natural Conversational</option>
-                  <option value="professional">Professional Narration</option>
-                  <option value="news">Broadcast News Anchor</option>
-                  <option value="documentary">Documentary Narrator (Deep & Warm)</option>
-                  <option value="storytelling">Storytelling & Audiobooks</option>
-                  <option value="energetic">Energetic Presentation</option>
-                  <option value="excited">Excited & Enthusiastic</option>
-                  <option value="happy">Happy & Upbeat</option>
-                  <option value="sad">Sad & Melancholy</option>
-                  <option value="angry">Angry & Emphatic</option>
-                  <option value="serious">Serious & Authoritative</option>
-                  <option value="curious">Curious & Inquisitive</option>
-                  <option value="sarcastic">Sarcastic Delivery</option>
-                  <option value="dramatic">Dramatic Delivery</option>
-                  <option value="suspenseful">Suspenseful & Tense</option>
-                  <option value="calm">Calm & Meditation</option>
-                  <option value="whispering">Intimate Whisper</option>
-                  <option value="comedy">Comedic & Bouncy</option>
-                  <option value="cinematic">Cinematic Trailer Voice</option>
+                  <option value="neutral">Neutral (Native Studio Reference)</option>
+                  <option value="conversational" selected>Conversational [Prosody & Presence]</option>
+                  <option value="professional">Professional Narration [Clarity EQ]</option>
+                  <option value="news">Broadcast News Anchor [Pacing & 3.2kHz EQ]</option>
+                  <option value="documentary">Documentary Narrator [Slow & Chest Resonance]</option>
+                  <option value="storytelling">Storytelling & Audiobooks [Dynamic Prosody & Warmth]</option>
+                  <option value="energetic">Energetic Presentation [Fast Cadence & Companding]</option>
+                  <option value="excited">Excited & Enthusiastic [Elevated Pitch & Companding]</option>
+                  <option value="happy">Happy & Upbeat [Cheerful Prosody & Lift]</option>
+                  <option value="sad">Sad & Melancholy [Subdued Cadence & Low-Pass]</option>
+                  <option value="angry">Angry & Emphatic [Aggressive Cadence & 2.4kHz Drive]</option>
+                  <option value="serious">Serious & Authoritative [Grave Register & Focus]</option>
+                  <option value="curious">Curious & Inquisitive [Rising Prosody Cadence]</option>
+                  <option value="sarcastic">Sarcastic Delivery [Drawn-out Cadence]</option>
+                  <option value="dramatic">Dramatic Delivery [Theatrical Pauses & Sub Bass]</option>
+                  <option value="suspenseful">Suspenseful & Tense [Breathless Pacing & Soft EQ]</option>
+                  <option value="calm">Calm & Meditation [Serene Pace & Silk EQ]</option>
+                  <option value="whispering">Intimate Whisper [De-voiced Lows & Air Presence]</option>
+                  <option value="comedy">Comedic & Bouncy [Animated Timing & Pitch]</option>
+                  <option value="cinematic">Cinematic Trailer Voice [Sub-Bass Warmth & Pacing]</option>
                 </select>
               </div>
 
@@ -805,17 +805,20 @@
         <button class="btn-tool" style="margin-top:14px; width:fit-content;" onclick="addDialogueLine()">+ Add Speaker Line</button>
       </section>
 
-      <!-- TAB 3: CUSTOM VOICE STUDIO (CLONING) -->
+      <!-- TAB 3: ACOUSTIC VOICE PROFILING & TIMBRE MATCHING -->
       <section id="cloneTab" class="view-panel">
-        <h2>Custom Voice Studio & Personal Voice Cloning</h2>
-        <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Create your authorized AI voice using as little as 5 to 15 seconds of clean reference speech.</p>
+        <h2>Acoustic Voice Profiling & Timbre Matching</h2>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">
+          Calibrate personal vocal characteristics (F0 fundamental pitch, formant bias, and acoustic register) from 5–15s of reference speech.
+          <br><em style="color:#d29922; font-size:12px;">⚠️ Engineering Disclosure: This feature performs parametric acoustic profiling rather than neural speaker weight distillation.</em>
+        </p>
 
         <div class="consent-banner">
           <strong>Mandatory Biometric Ownership & Consent Notice</strong>
           <p style="margin-top:4px;">You must own this voice or possess explicit written authorization from the individual to synthesize their voice. OpenVoice Studio enforces local-only privacy, non-impersonation safeguards, and watermarks all audio outputs.</p>
           <label class="consent-checkbox">
             <input type="checkbox" id="biometricConsentCheckbox">
-            <span>I certify under penalty of perjury that I am the authorized owner or have explicit permission to clone this voice. I will not use this voice to impersonate or defraud.</span>
+            <span>I certify under penalty of perjury that I am the authorized owner or have explicit permission to profile this voice. I will not use this voice to impersonate or defraud.</span>
           </label>
         </div>
 
@@ -1291,6 +1294,9 @@
             </button>
             <button class="btn-generate" onclick="renderMemeMixUI()">
               🎛️ Render Master Mix
+            </button>
+            <button class="btn-generate" onclick="renderMemeVideoUI()" style="background:#8957e5; color:#fff;" title="Export animated waveform visualizer video in MP4 format">
+              🎬 Export Video (MP4)
             </button>
           </div>
         </div>
@@ -2708,6 +2714,58 @@
         }
       } catch (err) {
         alert('Meme mixing failed: ' + err.message);
+      }
+    }
+
+    async function renderMemeVideoUI() {
+      try {
+        const badge = document.getElementById('memeDuckingStatusBadge');
+        if (badge) badge.innerText = '🎬 Rendering multitrack mix & MP4 video canvas...';
+
+        const formattedTracks = memeTracks.map(t => ({
+          name: t.name,
+          type: t.type,
+          file_name: t.file_name ? t.file_name.trim() : undefined,
+          music_genre: t.type === 'music' ? (t.music_genre || 'comedy') : undefined,
+          bpm: t.type === 'music' ? (t.bpm || 120) : undefined,
+          key: t.type === 'music' ? (t.key || 'C') : undefined,
+          seed: t.type === 'music' ? t.seed : undefined,
+          sfx_preset: t.type === 'sfx' ? (t.sfx_preset || 'cartoon_boing') : undefined,
+          start_time: parseFloat(t.start_time || 0),
+          trim_start: parseFloat(t.trim_start || 0),
+          duration: parseFloat(t.duration || 5.0),
+          fade_in_ms: parseFloat(t.fade_in_ms || 0),
+          fade_out_ms: parseFloat(t.fade_out_ms || 0),
+          volume: parseFloat(t.volume !== undefined ? t.volume : 1.0),
+          volume_automation: (Array.isArray(t.volume_automation) && t.volume_automation.length > 0)
+            ? t.volume_automation.map(pt => ({ time: parseFloat(pt.time || 0), volume: parseFloat(pt.volume !== undefined ? pt.volume : 1.0) }))
+            : undefined,
+          is_speech: Boolean(t.is_speech),
+          is_ducked: Boolean(t.is_ducked)
+        }));
+
+        const mixRes = await fetch('/api/meme/mix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tracks: formattedTracks, format: 'wav' })
+        });
+        const mixData = await mixRes.json();
+        if (!mixData.audio_url) throw new Error(mixData.detail || 'Audio mixdown failed');
+
+        const vidRes = await fetch('/api/meme/video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_name: mixData.file_name, title: 'OpenVoice Meme Production' })
+        });
+        const vidData = await vidRes.json();
+        if (vidData.video_url) {
+          if (badge) badge.innerText = `✅ MP4 Video Export Ready (${vidData.file_name})`;
+          window.open(vidData.video_url, '_blank');
+        } else {
+          alert('Video export error: ' + (vidData.detail || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Meme video export failed: ' + err.message);
       }
     }
 

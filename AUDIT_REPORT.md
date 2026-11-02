@@ -152,3 +152,4 @@ The most critical issue (**P0**)—*different voices sounding almost identical*�
    - Segment-level TTS regeneration and pronunciation dictionary integration.
 5. **Phase 6–10**:
    - Procedural music arrangement, sound effect library expansion, and sample-accurate waveform visualization.
+

@@ -160,8 +160,47 @@ async function runAuditUpgradeTests() {
     assert(renderSegRes.data.project_audio_url, 'Must return updated project master audio URL');
     console.log(`✅ [PASS] Segment rendered independently: ${renderSegRes.data.segment_audio_url}`);
 
+    // 8. Procedural Music Production Controls
+    console.log('\n--- 8. PROCEDURAL MUSIC PRODUCTION CONTROLS (FADES & REVERB) ---');
+    const musicRes = await request('POST', '/api/procedural/music', {
+      genre: 'ambient',
+      duration_seconds: 4,
+      seed: 42,
+      fade_in: 0.5,
+      fade_out: 0.5,
+      reverb_wet: 0.25,
+      volume: 0.9
+    });
+    assert.strictEqual(musicRes.status, 200);
+    assert(musicRes.data.audio_url, 'Must return music audio URL');
+    assert.strictEqual(musicRes.data.production_controls.reverb_wet, 0.25);
+    console.log(`✅ [PASS] Procedural music generated with fades and reverb wetness: ${musicRes.data.audio_url}`);
+
+    // 9. Meme Studio Video Export (MP4 with FFmpeg showwaves canvas)
+    console.log('\n--- 9. MEME STUDIO VIDEO EXPORT (MP4 WAVEFORM CANVAS) ---');
+    const memeVideoRes = await request('POST', '/api/meme/video', {
+      audio_url: genRes.data.audio_url,
+      top_text: 'OpenVoice Studio',
+      bottom_text: 'Pure Neural Audio'
+    });
+    assert.strictEqual(memeVideoRes.status, 200);
+    assert(memeVideoRes.data.video_url.endsWith('.mp4'), 'Video URL must be an MP4 file');
+    assert(memeVideoRes.data.file_size_bytes > 1000, 'Video file size must be non-trivial');
+    console.log(`✅ [PASS] Meme video rendered: ${memeVideoRes.data.video_url} (${memeVideoRes.data.file_size_bytes} bytes, ${memeVideoRes.data.resolution})`);
+
+    // 10. Audio Quality Lab Mastering Suite
+    console.log('\n--- 10. AUDIO QUALITY LAB MASTERING SUITE ---');
+    const masterRes = await request('POST', '/api/audio/master', {
+      audio_url: genRes.data.audio_url,
+      preset: 'voiceover'
+    });
+    assert.strictEqual(masterRes.status, 200);
+    assert(masterRes.data.mastered_audio_url, 'Must return mastered audio URL');
+    assert(masterRes.data.analysis, 'Must return audio quality analysis');
+    console.log(`✅ [PASS] Audio mastered with preset "${masterRes.data.preset}": ${masterRes.data.mastered_audio_url}`);
+
     console.log('\n================================================================');
-    console.log('   🎉 ALL 7 AUDIT UPGRADE SUBSYSTEM VERIFICATIONS PASSED!       ');
+    console.log('   🎉 ALL 10 AUDIT UPGRADE SUBSYSTEM VERIFICATIONS PASSED!      ');
     console.log('================================================================\n');
   } catch (err) {
     console.error('❌ Test failed with error:', err);

@@ -548,6 +548,8 @@ const server = http.createServer(async (req, res) => {
       const quality = await neuralEngine.analyzeAudioFile(tempRefWav);
       return sendJson(200, {
         analysis: quality,
+        profiling_method: 'zero_shot_acoustic_profiling',
+        disclosure: 'Parametric acoustic profiling (F0 pitch, formant shifting, and timbre registration)',
         temporary_file_path: tempRefWav
       });
     }
@@ -601,12 +603,14 @@ const server = http.createServer(async (req, res) => {
       const profile = {
         id: voiceId,
         name: body.name.trim(),
-        description: body.description || 'Personal cloned voice profile',
+        description: body.description || 'Custom acoustic voice profile (F0 pitch & timbre calibrated)',
         source_language: body.source_language || 'en-US',
         gender: body.gender || 'Female',
         base_timbre_voice: baseTimbre,
         is_custom: true,
         is_private: true,
+        profiling_method: 'zero_shot_acoustic_profiling',
+        method_disclosure: 'Parametric acoustic calibration (F0 fundamental frequency extraction, formant shift, and base timbre registration; not neural speaker distillation)',
         consent_record: {
           confirmed: true,
           authorized_by: body.consent_name || 'Authorized Owner',
@@ -942,7 +946,11 @@ const server = http.createServer(async (req, res) => {
         scale: body.scale,
         progression: body.progression,
         seed: body.seed,
-        sampleRate: proceduralEngine.SAMPLE_RATE
+        sampleRate: proceduralEngine.SAMPLE_RATE,
+        fadeInSeconds: parseFloat(body.fade_in || 0),
+        fadeOutSeconds: parseFloat(body.fade_out || 0),
+        reverbWet: parseFloat(body.reverb_wet || 0),
+        volume: parseFloat(body.volume || 1.0)
       });
 
       const wavBuffer = proceduralEngine.floatToWavBuffer(buffer, proceduralEngine.SAMPLE_RATE);
@@ -962,6 +970,12 @@ const server = http.createServer(async (req, res) => {
         file_name: musicId,
         duration_seconds: quality.duration_seconds,
         quality: quality,
+        production_controls: {
+          fade_in: parseFloat(body.fade_in || 0),
+          fade_out: parseFloat(body.fade_out || 0),
+          reverb_wet: parseFloat(body.reverb_wet || 0),
+          volume: parseFloat(body.volume || 1.0)
+        },
         sample_rate: proceduralEngine.SAMPLE_RATE
       });
     }
@@ -1053,6 +1067,103 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // 9D. Meme Studio Video Export (MP4 with Animated Waveform Canvas)
+    if (pathname === '/api/meme/video' && method === 'POST') {
+      const body = await getBody();
+      const audioFileName = body.file_name || (body.audio_url ? path.basename(body.audio_url) : null);
+      if (!audioFileName) return sendJson(400, { detail: 'Source audio file name or audio_url is required.' });
+
+      const audioPath = path.join(AUDIO_DIR, audioFileName);
+      if (!fs.existsSync(audioPath)) return sendJson(404, { detail: 'Source audio file not found on disk.' });
+
+      const videoId = `meme_video_${crypto.randomBytes(4).toString('hex')}.mp4`;
+      const videoPath = path.join(AUDIO_DIR, videoId);
+      const audioQuality = await neuralEngine.analyzeAudioFile(audioPath);
+      const dur = Math.max(1.0, audioQuality.duration_seconds || 5.0);
+
+      const ffmpegArgs = [
+        '-y',
+        '-f', 'lavfi', '-i', `color=c=0x0d1117:s=1280x720:d=${dur.toFixed(2)}`,
+        '-i', audioPath,
+        '-filter_complex',
+        '[1:a]showwaves=s=1200x260:mode=line:colors=0x58a6ff[vwave];[0:v][vwave]overlay=(W-w)/2:(H-h)/2[v]',
+        '-map', '[v]',
+        '-map', '1:a',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-shortest',
+        videoPath
+      ];
+
+      execFile('ffmpeg', ffmpegArgs, (err) => {
+        if (err) {
+          console.error('[Video Export Error]', err);
+          return sendJson(500, { detail: `Video export failed: ${err.message}` });
+        }
+        const stat = fs.existsSync(videoPath) ? fs.statSync(videoPath) : { size: 0 };
+        return sendJson(200, {
+          success: true,
+          video_url: `/api/audio/file/${videoId}`,
+          file_name: videoId,
+          duration_seconds: dur,
+          file_size_bytes: stat.size,
+          resolution: '1280x720',
+          format: 'mp4'
+        });
+      });
+      return;
+    }
+
+    // 9E. Audio Quality Lab Mastering Suite
+    if (pathname === '/api/audio/master' && method === 'POST') {
+      const body = await getBody();
+      const audioFileName = body.file_name || (body.audio_url ? path.basename(body.audio_url) : null);
+      if (!audioFileName) return sendJson(400, { detail: 'Source audio file name is required.' });
+
+      const audioPath = path.join(AUDIO_DIR, audioFileName);
+      if (!fs.existsSync(audioPath)) return sendJson(404, { detail: 'Source audio file not found.' });
+
+      const preset = (body.preset || 'podcast').toLowerCase();
+      let filterChain = 'loudnorm=I=-16:TP=-1.0:LRA=11';
+
+      if (preset === 'voiceover') {
+        filterChain = 'highpass=f=80,equalizer=f=3200:t=q:w=1.0:g=2.0,loudnorm=I=-16:TP=-1.0:LRA=10';
+      } else if (preset === 'meme') {
+        filterChain = 'compand=attacks=0.01:decays=0.08:points=-40/-35|-18/-10|0/-1,loudnorm=I=-14:TP=-1.0:LRA=7';
+      } else if (preset === 'background_music') {
+        filterChain = 'equalizer=f=120:t=q:w=1.0:g=-3.0,equalizer=f=8000:t=q:w=1.0:g=-2.0,loudnorm=I=-20:TP=-1.5:LRA=14';
+      } else if (preset === 'cinematic') {
+        filterChain = 'equalizer=f=75:t=q:w=0.8:g=2.5,loudnorm=I=-18:TP=-1.0:LRA=16';
+      }
+
+      const masterId = `mastered_${preset}_${crypto.randomBytes(4).toString('hex')}.wav`;
+      const masterPath = path.join(AUDIO_DIR, masterId);
+
+      execFile('ffmpeg', [
+        '-y', '-i', audioPath,
+        '-af', filterChain,
+        '-c:a', 'pcm_s16le',
+        '-ar', '24000',
+        masterPath
+      ], async (err) => {
+        if (err) return sendJson(500, { detail: `Mastering failed: ${err.message}` });
+        const quality = await neuralEngine.analyzeAudioFile(masterPath);
+        return sendJson(200, {
+          success: true,
+          preset,
+          audio_url: `/api/audio/file/${masterId}`,
+          mastered_audio_url: `/api/audio/file/${masterId}`,
+          file_name: masterId,
+          duration_seconds: quality.duration_seconds,
+          quality,
+          analysis: quality
+        });
+      });
+      return;
+    }
+
     // 10. Generation History
     if (pathname === '/api/generations' && method === 'GET') {
       const rows = db.prepare('SELECT * FROM generations ORDER BY created_at DESC LIMIT 50').all();
@@ -1072,7 +1183,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const stat = fs.statSync(aPath);
-      const mime = fname.endsWith('.mp3') ? 'audio/mpeg' : fname.endsWith('.flac') ? 'audio/flac' : 'audio/wav';
+      const mime = fname.endsWith('.mp4') ? 'video/mp4' : fname.endsWith('.mp3') ? 'audio/mpeg' : fname.endsWith('.flac') ? 'audio/flac' : 'audio/wav';
 
       res.writeHead(200, {
         'Content-Type': mime,

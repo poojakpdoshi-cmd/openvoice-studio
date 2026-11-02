@@ -1022,7 +1022,11 @@ function generateProceduralMusic({
   progression = null,
   seed = null,
   loop = true,
-  sampleRate = SAMPLE_RATE
+  sampleRate = SAMPLE_RATE,
+  fadeInSeconds = 0.0,
+  fadeOutSeconds = 0.0,
+  reverbWet = 0.0,
+  volume = 1.0
 } = {}) {
   const safeBpm = Math.max(40, Math.min(240, parseInt(bpm || 120, 10)));
   const safeDur = Math.max(1.0, Math.min(120.0, parseFloat(durationSeconds || 12.0)));
@@ -1506,7 +1510,32 @@ function generateProceduralMusic({
     }
   }
 
-  const output = normalizeAndLimit(masterBuffer);
+  // Master Production Controls: Fades, Reverb, Volume Gain
+  if (fadeInSeconds > 0) {
+    const fadeSamples = Math.min(masterBuffer.length, Math.floor(fadeInSeconds * sampleRate));
+    for (let i = 0; i < fadeSamples; i++) {
+      masterBuffer[i] *= (i / fadeSamples);
+    }
+  }
+  if (fadeOutSeconds > 0) {
+    const fadeSamples = Math.min(masterBuffer.length, Math.floor(fadeOutSeconds * sampleRate));
+    const startFade = masterBuffer.length - fadeSamples;
+    for (let i = 0; i < fadeSamples; i++) {
+      masterBuffer[startFade + i] *= (1.0 - i / fadeSamples);
+    }
+  }
+
+  let finalBuffer = masterBuffer;
+  if (reverbWet && reverbWet > 0) {
+    finalBuffer = reverb.process(finalBuffer, Math.min(0.6, reverbWet), 0.5);
+  }
+  if (volume !== 1.0 && volume > 0) {
+    for (let i = 0; i < finalBuffer.length; i++) {
+      finalBuffer[i] *= volume;
+    }
+  }
+
+  const output = normalizeAndLimit(finalBuffer);
   // Attach reproducible metadata
   output.seed = actualSeed;
   output.bpm = safeBpm;
