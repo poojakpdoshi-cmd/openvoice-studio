@@ -281,6 +281,105 @@ function normalizeAndLimit(buffer, targetPeakDb = -1.0) {
 }
 
 /**
+ * Deterministic Pseudo-Random Number Generator (Mulberry32)
+ * Supports numerical seeds or string seeds via Fowler-Noll-Vo 32-bit hash.
+ */
+function hashStringSeed(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function createRng(seed) {
+  let s = (typeof seed === 'string')
+    ? hashStringSeed(seed)
+    : ((typeof seed === 'number' && isFinite(seed)) ? (seed >>> 0) : Math.floor(Math.random() * 0xFFFFFFFF));
+  return function() {
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Rich Physical & Synthesizer Instrument Timbres
+ */
+const SynthInstruments = {
+  /**
+   * FM Electric Piano / Bell Synthesizer (Chime, Rhodes, Mallet)
+   */
+  fmNote: (freq, duration, sampleRate = SAMPLE_RATE, { modRatio = 2.0, modIndex = 2.4, decay = 2.8 } = {}) => {
+    const numSamples = Math.floor(duration * sampleRate);
+    const buf = new Float32Array(numSamples);
+    let pCarrier = 0;
+    let pMod = 0;
+    const modFreq = freq * modRatio;
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const env = Math.exp(-t * decay);
+      pMod += (2 * Math.PI * modFreq) / sampleRate;
+      const modSignal = Math.sin(pMod) * (modIndex * env);
+      pCarrier += (2 * Math.PI * freq) / sampleRate;
+      buf[i] = Math.sin(pCarrier + modSignal) * env;
+    }
+    return buf;
+  },
+
+  /**
+   * Karplus-Strong Plucked String (Acoustic guitar / harp / pizzicato strings)
+   */
+  pluckedString: (freq, duration, sampleRate = SAMPLE_RATE, { damping = 0.985 } = {}) => {
+    const numSamples = Math.floor(duration * sampleRate);
+    const buf = new Float32Array(numSamples);
+    const delayLength = Math.max(2, Math.round(sampleRate / Math.max(20, freq)));
+    const delayBuffer = new Float32Array(delayLength);
+    for (let i = 0; i < delayLength; i++) {
+      delayBuffer[i] = Math.random() * 2.0 - 1.0;
+    }
+    let ptr = 0;
+    let prev = 0;
+    for (let i = 0; i < numSamples; i++) {
+      const val = delayBuffer[ptr];
+      const filtered = 0.5 * (val + prev) * damping;
+      prev = val;
+      delayBuffer[ptr] = filtered;
+      ptr = (ptr + 1) % delayLength;
+      buf[i] = val;
+    }
+    return buf;
+  },
+
+  /**
+   * Supersaw Lead (Detuned unison oscillators with lowpass filter)
+   */
+  supersawLead: (freq, duration, sampleRate = SAMPLE_RATE, { detuneCents = 14, numOsc = 3, cutoff = 2800 } = {}) => {
+    const numSamples = Math.floor(duration * sampleRate);
+    const buf = new Float32Array(numSamples);
+    const phases = new Float32Array(numOsc);
+    const freqs = new Float32Array(numOsc);
+    for (let o = 0; o < numOsc; o++) {
+      const centOffset = (o - (numOsc - 1) / 2) * detuneCents;
+      freqs[o] = freq * Math.pow(2, centOffset / 1200);
+    }
+    const filter = new BiquadFilter('lowpass', cutoff, 1.2, sampleRate);
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      let sum = 0;
+      for (let o = 0; o < numOsc; o++) {
+        phases[o] += (2 * Math.PI * freqs[o]) / sampleRate;
+        sum += Oscillators.sawtooth(phases[o]);
+      }
+      buf[i] = filter.process(sum / numOsc) * Math.exp(-t * 2.2);
+    }
+    return normalizeAndLimit(buf, -1.0);
+  }
+};
+
+/**
  * Convert Float32Array to 16-bit PCM WAV Buffer
  */
 function floatToWavBuffer(samples, sampleRate = SAMPLE_RATE) {
@@ -643,10 +742,21 @@ const SCALES = {
   major: [0, 2, 4, 5, 7, 9, 11],
   minor: [0, 2, 3, 5, 7, 8, 10],
   harmonic_minor: [0, 2, 3, 5, 7, 8, 11],
+  melodic_minor: [0, 2, 3, 5, 7, 9, 11],
+  dorian: [0, 2, 3, 5, 7, 9, 10],
+  phrygian: [0, 1, 3, 5, 7, 8, 10],
+  lydian: [0, 2, 4, 6, 7, 9, 11],
+  mixolydian: [0, 2, 4, 5, 7, 9, 10],
+  blues: [0, 3, 5, 6, 7, 10],
   pentatonic_major: [0, 2, 4, 7, 9],
   pentatonic_minor: [0, 3, 5, 7, 10],
-  blues: [0, 3, 5, 6, 7, 10],
-  dorian: [0, 2, 3, 5, 7, 9, 10]
+  pentatonic: [0, 2, 4, 7, 9]
+};
+
+const NOTE_MAP = {
+  'C': 0, 'C#': 1, 'DB': 1, 'D': 2, 'D#': 3, 'EB': 3,
+  'E': 4, 'F': 5, 'F#': 6, 'GB': 6, 'G': 7, 'G#': 8,
+  'AB': 8, 'A': 9, 'A#': 10, 'BB': 10, 'B': 11
 };
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -656,8 +766,45 @@ function noteToFreq(midiNote) {
 }
 
 function getMidiRoot(keyName = 'C', octave = 4) {
-  const index = NOTE_NAMES.indexOf(keyName.toUpperCase());
-  return 12 * (octave + 1) + (index >= 0 ? index : 0);
+  const norm = (keyName || 'C').toUpperCase().trim();
+  const index = NOTE_MAP[norm] !== undefined ? NOTE_MAP[norm] : 0;
+  return 12 * (octave + 1) + index;
+}
+
+/**
+ * Parse custom progression from string or array (e.g. ['I', 'V', 'vi', 'IV'] or [0, 7, 9, 5])
+ */
+function parseProgression(progInput, rootMidi) {
+  if (!progInput) return null;
+  if (Array.isArray(progInput) && typeof progInput[0] === 'number') {
+    return progInput.map(offset => rootMidi + offset);
+  }
+  const progStr = Array.isArray(progInput) ? progInput.join(',') : String(progInput);
+  const tokens = progStr.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+  const romanMap = {
+    'i': 0, 'I': 0,
+    'ii': 2, 'II': 2,
+    'iii': 4, 'III': 4,
+    'iv': 5, 'IV': 5,
+    'v': 7, 'V': 7,
+    'vi': 8, 'VI': 8,
+    'vii': 10, 'VII': 10
+  };
+  const results = [];
+  for (const tok of tokens) {
+    if (romanMap[tok] !== undefined) {
+      results.push(rootMidi + romanMap[tok]);
+    } else {
+      const match = tok.match(/^([a-gA-G][#b]?)/);
+      if (match && NOTE_MAP[match[1].toUpperCase()] !== undefined) {
+        results.push(12 * (Math.floor(rootMidi / 12)) + NOTE_MAP[match[1].toUpperCase()]);
+      } else {
+        const num = parseInt(tok, 10);
+        if (!isNaN(num)) results.push(rootMidi + num);
+      }
+    }
+  }
+  return results.length > 0 ? results : null;
 }
 
 /**
@@ -684,10 +831,8 @@ const SynthDrums = {
     let phase = 0;
     for (let i = 0; i < numSamples; i++) {
       const t = i / sampleRate;
-      // Tone body
       phase += (2 * Math.PI * 185) / sampleRate;
       const tone = Oscillators.sine(phase) * Math.exp(-t * 22.0);
-      // Noise burst
       const noise = (Math.random() * 2.0 - 1.0) * Math.exp(-t * 14.0);
       buf[i] = tone * 0.4 + filter.process(noise) * 0.8;
     }
@@ -714,39 +859,104 @@ const SynthDrums = {
       buf[i] = filter.process(Math.random() * 2.0 - 1.0) * Math.exp(-t * 12.0);
     }
     return buf;
+  },
+
+  crash: (sampleRate = SAMPLE_RATE) => {
+    const numSamples = Math.floor(1.4 * sampleRate);
+    const buf = new Float32Array(numSamples);
+    const filter = new BiquadFilter('highpass', 5000, 1.2, sampleRate);
+    let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      p1 += (2 * Math.PI * 342) / sampleRate;
+      p2 += (2 * Math.PI * 521) / sampleRate;
+      p3 += (2 * Math.PI * 789) / sampleRate;
+      p4 += (2 * Math.PI * 1042) / sampleRate;
+      const metallic = (Oscillators.square(p1, 0.4) + Oscillators.square(p2, 0.3) + Oscillators.square(p3, 0.2) + Oscillators.square(p4, 0.5)) * 0.25;
+      const noise = (Math.random() * 2.0 - 1.0) * 0.75;
+      buf[i] = filter.process(metallic + noise) * Math.exp(-t * 2.8);
+    }
+    return buf;
+  },
+
+  tom: (sampleRate = SAMPLE_RATE, startFreq = 160, endFreq = 65) => {
+    const numSamples = Math.floor(0.22 * sampleRate);
+    const buf = new Float32Array(numSamples);
+    let phase = 0;
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const freq = startFreq * Math.exp(-t * 14.0) + endFreq;
+      phase += (2 * Math.PI * freq) / sampleRate;
+      buf[i] = Oscillators.sine(phase) * Math.exp(-t * 7.5);
+    }
+    return buf;
   }
 };
 
 /**
- * Procedural Music Composition Generator
+ * Procedural Music Composition Generator with Deterministic Seed & Section Transitions
  */
 function generateProceduralMusic({
   genre = '8bit_retro',
   bpm = 120,
   durationSeconds = 12.0,
   key = 'C',
+  scale = null,
+  progression = null,
+  seed = null,
   loop = true,
   sampleRate = SAMPLE_RATE
-}) {
-  const totalSamples = Math.floor(durationSeconds * sampleRate);
+} = {}) {
+  const safeBpm = Math.max(40, Math.min(240, parseInt(bpm || 120, 10)));
+  const safeDur = Math.max(1.0, Math.min(120.0, parseFloat(durationSeconds || 12.0)));
+  const totalSamples = Math.floor(safeDur * sampleRate);
   const masterBuffer = new Float32Array(totalSamples);
-  const beatDuration = 60.0 / bpm;
+  const beatDuration = 60.0 / safeBpm;
   const samplesPerBeat = Math.floor(beatDuration * sampleRate);
-  const totalBeats = Math.floor(durationSeconds / beatDuration);
+  const totalBeats = Math.floor(safeDur / beatDuration);
+
+  // Deterministic PRNG initialization
+  const actualSeed = (seed !== null && seed !== undefined) ? seed : 1337;
+  const rng = createRng(actualSeed);
+
+  // Musical Scale Selection
+  let activeScale = SCALES.minor;
+  let scaleName = 'minor';
+  if (scale) {
+    if (typeof scale === 'string' && SCALES[scale.toLowerCase()]) {
+      activeScale = SCALES[scale.toLowerCase()];
+      scaleName = scale.toLowerCase();
+    } else if (Array.isArray(scale)) {
+      activeScale = scale;
+      scaleName = 'custom';
+    }
+  } else if (genre === 'happy' || genre === 'comedy') {
+    activeScale = SCALES.major;
+    scaleName = 'major';
+  } else if (genre === 'dramatic') {
+    activeScale = SCALES.harmonic_minor;
+    scaleName = 'harmonic_minor';
+  }
 
   const rootMidi = getMidiRoot(key, 3);
-  const scale = SCALES.minor;
+  const customChords = parseProgression(progression, rootMidi);
+  const reverb = new AlgorithmicReverb(sampleRate);
 
   // 1. CHIPTUNE / 8-BIT RETRO
   if (genre === '8bit_retro') {
     const root = getMidiRoot(key, 4);
-    const arpeggioOffsets = [0, 4, 7, 12, 7, 4, 2, 7]; // Major arpeggio steps
+    const chords = customChords || [root, root + 7, root + 9, root + 5];
+    const motif = [0, 4, 7, 12, 11, 7, 4, 2];
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
-
-      // Drums: Kick on 1, 3; Snare on 2, 4; Hats on 8ths
       const beatInBar = b % 4;
+      const barIdx = Math.floor(b / 4);
+      const isTransition = (b % 8 === 7);
+      const isSectionStart = (b % 8 === 0 && b > 0);
+      const chordRoot = chords[barIdx % chords.length];
+
+      // Drums
       if (beatInBar === 0 || beatInBar === 2) {
         mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.7);
       }
@@ -754,15 +964,25 @@ function generateProceduralMusic({
         mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart, 0.6);
       }
       mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart, 0.4);
-      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.35);
+      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.3);
+
+      // Transition Fill (Toms on beat 4 of transition bar)
+      if (isTransition && beatInBar === 3) {
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 190, 80), beatStart, 0.6);
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 140, 55), beatStart + Math.floor(samplesPerBeat / 2), 0.6);
+      }
+      // Section Start Crash Cymbal
+      if (isSectionStart && beatInBar === 0) {
+        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate), 0.4, 0.6), beatStart, 0.6);
+      }
 
       // Fast 16th-note Chiptune Arpeggios (Pulse wave 25% duty)
       const sixteenths = 4;
       const samplesPer16th = Math.floor(samplesPerBeat / sixteenths);
       for (let s = 0; s < sixteenths; s++) {
-        const step = (b * 4 + s) % arpeggioOffsets.length;
-        const midi = root + arpeggioOffsets[step];
-        const freq = noteToFreq(midi);
+        const step = (b * 4 + s) % motif.length;
+        const noteMidi = chordRoot + motif[step];
+        const freq = noteToFreq(noteMidi);
         const noteBuf = new Float32Array(samplesPer16th);
         let phase = 0;
         for (let i = 0; i < samplesPer16th; i++) {
@@ -772,14 +992,14 @@ function generateProceduralMusic({
         mixClip(masterBuffer, noteBuf, beatStart + s * samplesPer16th, 0.35);
       }
 
-      // Triangle Bassline (Quarter notes)
-      const bassMidi = root - 24 + ((b % 8 < 4) ? 0 : 5);
+      // Triangle Bassline
+      const bassMidi = chordRoot - 12 + ((b % 2 === 1) ? 7 : 0);
       const bassFreq = noteToFreq(bassMidi);
       const bassBuf = new Float32Array(samplesPerBeat);
       let bPhase = 0;
       for (let i = 0; i < samplesPerBeat; i++) {
         bPhase += (2 * Math.PI * bassFreq) / sampleRate;
-        bassBuf[i] = Oscillators.triangle(bPhase) * Math.exp(-(i / samplesPerBeat) * 1.8);
+        bassBuf[i] = Oscillators.triangle(bPhase) * Math.exp(-(i / samplesPerBeat) * 2.0);
       }
       mixClip(masterBuffer, bassBuf, beatStart, 0.65);
     }
@@ -788,19 +1008,31 @@ function generateProceduralMusic({
   // 2. ELECTRONIC / SYNTHWAVE
   else if (genre === 'electronic') {
     const root = getMidiRoot(key, 3);
-    const chords = [0, -4, -2, -5]; // i - VI - VII - v progression
+    const chords = customChords || [root, root - 4, root - 2, root - 5];
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
       const barIdx = Math.floor(b / 4) % chords.length;
-      const chordRoot = root + chords[barIdx];
+      const chordRoot = chords[barIdx];
+      const isTransition = (b % 8 === 7);
+      const isSectionStart = (b % 8 === 0 && b > 0);
 
       // 4-on-the-floor kick
       mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.85);
       // Snare on 2 and 4
       if (b % 2 === 1) mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart, 0.7);
-      // Offbeat hi-hat
+      // Offbeat open hi-hat
       mixClip(masterBuffer, SynthDrums.hihat_open(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.45);
+
+      // Transition fill
+      if (isTransition && (b % 4 === 3)) {
+        mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart + Math.floor(samplesPerBeat / 4), 0.5);
+        mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.65);
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 180, 60), beatStart + Math.floor(samplesPerBeat * 0.75), 0.7);
+      }
+      if (isSectionStart && (b % 4 === 0)) {
+        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate), 0.45, 0.6), beatStart, 0.75);
+      }
 
       // Driving 16th Sawtooth Bassline
       const bassBuf = new Float32Array(Math.floor(samplesPerBeat / 2));
@@ -808,34 +1040,36 @@ function generateProceduralMusic({
       let p = 0;
       for (let i = 0; i < bassBuf.length; i++) {
         p += (2 * Math.PI * bFreq) / sampleRate;
-        bassBuf[i] = Oscillators.sawtooth(p) * Math.exp(-(i / bassBuf.length) * 2.0);
+        bassBuf[i] = Oscillators.sawtooth(p) * Math.exp(-(i / bassBuf.length) * 2.2);
       }
       mixClip(masterBuffer, bassBuf, beatStart, 0.55);
       mixClip(masterBuffer, bassBuf, beatStart + Math.floor(samplesPerBeat / 2), 0.55);
 
-      // Synth Pluck Arpeggio
-      const arpNotes = [chordRoot, chordRoot + 3, chordRoot + 7, chordRoot + 10];
-      const noteMidi = arpNotes[b % arpNotes.length] + 12;
-      const pFreq = noteToFreq(noteMidi);
-      const leadBuf = new Float32Array(samplesPerBeat);
-      let lp = 0;
-      for (let i = 0; i < samplesPerBeat; i++) {
-        lp += (2 * Math.PI * pFreq) / sampleRate;
-        leadBuf[i] = (Oscillators.sawtooth(lp) + Oscillators.square(lp, 0.5)) * Math.exp(-(i / samplesPerBeat) * 3.5);
-      }
-      mixClip(masterBuffer, leadBuf, beatStart, 0.4);
+      // Rich Supersaw Lead Pluck with Motif Variation
+      const motifIntervals = [0, 3, 7, 10, 12, 10, 7, 3];
+      const noteMidi = chordRoot + 12 + motifIntervals[(b * 2) % motifIntervals.length];
+      const leadNote = SynthInstruments.supersawLead(noteToFreq(noteMidi), beatDuration * 0.9, sampleRate, {
+        detuneCents: 16,
+        numOsc: 3,
+        cutoff: 3200
+      });
+      mixClip(masterBuffer, leadNote, beatStart, 0.45);
     }
   }
 
   // 3. COMEDY / OOMPAH BOUNCE
   else if (genre === 'comedy') {
     const root = getMidiRoot(key, 3);
+    const chords = customChords || [root, root + 5, root + 7, root];
+
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
       const beatInBar = b % 4;
+      const barIdx = Math.floor(b / 4) % chords.length;
+      const chordRoot = chords[barIdx];
 
       // Oompah Bass: Root on 1, 3; Fifth on 2, 4
-      const bassMidi = root - 12 + ((beatInBar % 2 === 0) ? 0 : 7);
+      const bassMidi = chordRoot - 12 + ((beatInBar % 2 === 0) ? 0 : 7);
       const bFreq = noteToFreq(bassMidi);
       const bBuf = new Float32Array(samplesPerBeat);
       let bp = 0;
@@ -845,19 +1079,15 @@ function generateProceduralMusic({
       }
       mixClip(masterBuffer, bBuf, beatStart, 0.7);
 
-      // Staccato Ragtime Chords on offbeats
+      // Ragtime FM Piano Chords on offbeats (2 and 4)
       if (beatInBar === 1 || beatInBar === 3) {
-        const chordBuf = new Float32Array(Math.floor(samplesPerBeat * 0.6));
-        const triad = [root + 12, root + 16, root + 19];
+        const triad = [chordRoot + 12, chordRoot + 16, chordRoot + 19];
         triad.forEach(m => {
-          const f = noteToFreq(m);
-          let p = 0;
-          for (let i = 0; i < chordBuf.length; i++) {
-            p += (2 * Math.PI * f) / sampleRate;
-            chordBuf[i] += Oscillators.triangle(p) * Math.exp(-(i / chordBuf.length) * 6.0) * 0.25;
-          }
+          const pianoNote = SynthInstruments.fmNote(noteToFreq(m), beatDuration * 0.6, sampleRate, {
+            modRatio: 2.0, modIndex: 1.8, decay: 6.0
+          });
+          mixClip(masterBuffer, pianoNote, beatStart, 0.25);
         });
-        mixClip(masterBuffer, chordBuf, beatStart, 0.5);
       }
     }
   }
@@ -865,9 +1095,9 @@ function generateProceduralMusic({
   // 4. SUSPENSE / TENSION
   else if (genre === 'suspense') {
     const root = getMidiRoot(key, 2);
-    const reverb = new AlgorithmicReverb();
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
+
       // Heartbeat sub-kick every 2 beats
       if (b % 2 === 0) {
         mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.75);
@@ -886,17 +1116,13 @@ function generateProceduralMusic({
         mixClip(masterBuffer, droneBuf, beatStart, 0.6);
       }
 
-      // Eerie high cluster ping on beat 3 of every 2 bars
+      // Eerie high cluster FM bell ping on beat 3
       if (b % 8 === 4) {
-        const pingBuf = new Float32Array(samplesPerBeat * 2);
-        const pMidi = root + 36 + ((b % 16 === 4) ? 1 : 6); // Dissonant interval
-        const pFreq = noteToFreq(pMidi);
-        let p = 0;
-        for (let i = 0; i < pingBuf.length; i++) {
-          p += (2 * Math.PI * pFreq) / sampleRate;
-          pingBuf[i] = Oscillators.sine(p) * Math.exp(-(i / pingBuf.length) * 4.0);
-        }
-        mixClip(masterBuffer, reverb.process(pingBuf, 0.6, 0.4), beatStart, 0.4);
+        const pMidi = root + 36 + ((b % 16 === 4) ? 1 : 6);
+        const bell = SynthInstruments.fmNote(noteToFreq(pMidi), beatDuration * 2.5, sampleRate, {
+          modRatio: 3.5, modIndex: 3.0, decay: 1.8
+        });
+        mixClip(masterBuffer, reverb.process(bell, 0.6, 0.4), beatStart, 0.5);
       }
     }
   }
@@ -904,33 +1130,35 @@ function generateProceduralMusic({
   // 5. CINEMATIC / EPIC ORCHESTRAL
   else if (genre === 'cinematic') {
     const root = getMidiRoot(key, 2);
-    const reverb = new AlgorithmicReverb();
-    const ostinato = [0, 0, 3, 0, 7, 0, 5, 0]; // Driving D-minor cello ostinato
+    const chords = customChords || [root, root + 3, root + 7, root + 5];
+    const ostinato = [0, 0, 3, 0, 7, 0, 5, 0];
+
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
       const beatInBar = b % 4;
+      const barIdx = Math.floor(b / 4) % chords.length;
+      const chordRoot = chords[barIdx];
 
-      // Heavy Taiko Boom on beat 1 and 3
+      // Heavy Taiko Boom on 1 and 3
       if (beatInBar === 0 || beatInBar === 2) {
-        const taiko = SynthDrums.kick(sampleRate);
-        mixClip(masterBuffer, taiko, beatStart, 0.85);
+        mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.85);
       }
-
-      // Marching snare on beat 2 and 4 with 16th roll transient
+      // Marching snare on 2 and 4
       if (beatInBar === 1 || beatInBar === 3) {
         mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart, 0.6);
-        if (b % 8 === 7) { // Accent roll on 8th bar
-          const rollOffset = Math.floor(samplesPerBeat / 4);
-          mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart + rollOffset, 0.4);
-          mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart + rollOffset * 2, 0.5);
+        if (b % 8 === 7) {
+          mixClip(masterBuffer, SynthDrums.tom(sampleRate, 170, 70), beatStart + Math.floor(samplesPerBeat / 2), 0.55);
         }
       }
+      if (b % 8 === 0 && b > 0) {
+        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate), 0.5, 0.5), beatStart, 0.7);
+      }
 
-      // 8th-note Driving Orchestral Strings Ostinato
+      // Driving Staccato Strings Ostinato (8ths)
       const halfBeat = Math.floor(samplesPerBeat / 2);
       for (let s = 0; s < 2; s++) {
-        const stepIdx = (b * 2 + s) % ostinato.length;
-        const noteMidi = root + 12 + ostinato[stepIdx];
+        const step = (b * 2 + s) % ostinato.length;
+        const noteMidi = chordRoot + 12 + ostinato[step];
         const freq = noteToFreq(noteMidi);
         const staccatoBuf = new Float32Array(halfBeat);
         let p = 0;
@@ -946,7 +1174,7 @@ function generateProceduralMusic({
       if (beatInBar === 0) {
         const brassLen = samplesPerBeat * 4;
         const brassBuf = new Float32Array(brassLen);
-        const chordNotes = [root, root + 7, root + 15];
+        const chordNotes = [chordRoot, chordRoot + 7, chordRoot + 15];
         chordNotes.forEach(m => {
           const f = noteToFreq(m);
           let bp = 0;
@@ -964,19 +1192,17 @@ function generateProceduralMusic({
   // 6. HAPPY / UPBEAT GROOVE
   else if (genre === 'happy') {
     const root = getMidiRoot(key, 3);
-    const progression = [0, 7, 9, 5]; // I - V - vi - IV (C - G - Am - F)
+    const chords = customChords || [root, root + 7, root + 9, root + 5]; // I - V - vi - IV
     const melodySteps = [0, 4, 7, 9, 12, 9, 7, 4];
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
       const beatInBar = b % 4;
-      const chordIdx = Math.floor(b / 4) % progression.length;
-      const currentRoot = root + progression[chordIdx];
+      const chordIdx = Math.floor(b / 4) % chords.length;
+      const currentRoot = chords[chordIdx];
 
-      // Kick on 1 and 3, Snare on 2 and 4
       if (beatInBar === 0 || beatInBar === 2) mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.7);
       if (beatInBar === 1 || beatInBar === 3) mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart, 0.65);
-      // Bright 8th-note hi-hats
       mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart, 0.35);
       mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.3);
 
@@ -991,38 +1217,35 @@ function generateProceduralMusic({
       }
       mixClip(masterBuffer, bassBuf, beatStart, 0.6);
 
-      // Cheerful Syncopated Bell Melody (Sine + Triangle)
+      // Plucked Acoustic String Melody (Karplus-Strong physical modeling)
       const melIdx = (b * 2) % melodySteps.length;
-      const melFreq = noteToFreq(root + 12 + melodySteps[melIdx]);
-      const melBuf = new Float32Array(Math.floor(samplesPerBeat * 0.8));
-      let mp = 0;
-      for (let i = 0; i < melBuf.length; i++) {
-        mp += (2 * Math.PI * melFreq) / sampleRate;
-        melBuf[i] = (Oscillators.sine(mp) * 0.7 + Oscillators.triangle(mp * 2) * 0.3) * Math.exp(-(i / melBuf.length) * 4.0);
-      }
-      mixClip(masterBuffer, melBuf, beatStart, 0.4);
+      const melFreq = noteToFreq(currentRoot + 12 + melodySteps[melIdx]);
+      const plucked = SynthInstruments.pluckedString(melFreq, beatDuration * 0.85, sampleRate, { damping: 0.982 });
+      mixClip(masterBuffer, plucked, beatStart, 0.45);
     }
   }
 
   // 7. DRAMATIC / INTENSE CRESCENDO
   else if (genre === 'dramatic') {
     const root = getMidiRoot(key, 2);
-    const reverb = new AlgorithmicReverb();
+    const chords = customChords || [root, root + 3, root + 8, root + 7];
+    const harmMinor = [0, 3, 7, 8, 11, 12, 11, 8];
+
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
       const beatInBar = b % 4;
+      const barIdx = Math.floor(b / 4) % chords.length;
+      const currentRoot = chords[barIdx];
 
-      // Heavy Sub Impact on every downbeat
       if (beatInBar === 0) {
         mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.85);
       }
 
-      // Fast Harmonic Minor Arpeggio Swarm (Sawtooth 16ths)
-      const harmMinor = [0, 3, 7, 8, 11, 12, 11, 8];
+      // Fast Harmonic Minor Supersaw Arpeggio
       const samplesPer16th = Math.floor(samplesPerBeat / 4);
       for (let s = 0; s < 4; s++) {
         const step = (b * 4 + s) % harmMinor.length;
-        const arpMidi = root + 24 + harmMinor[step];
+        const arpMidi = currentRoot + 24 + harmMinor[step];
         const aFreq = noteToFreq(arpMidi);
         const aBuf = new Float32Array(samplesPer16th);
         let ap = 0;
@@ -1030,21 +1253,15 @@ function generateProceduralMusic({
           ap += (2 * Math.PI * aFreq) / sampleRate;
           aBuf[i] = Oscillators.sawtooth(ap) * Math.exp(-(i / samplesPer16th) * 2.8);
         }
-        mixClip(masterBuffer, aBuf, beatStart + s * samplesPer16th, 0.3);
+        mixClip(masterBuffer, aBuf, beatStart + s * samplesPer16th, 0.35);
       }
 
-      // Timpani roll on bar transitions
+      // Timpani roll fill on transition bars
       if (b % 4 === 3) {
-        const timpaniLen = Math.floor(samplesPerBeat * 0.8);
-        const timpaniBuf = new Float32Array(timpaniLen);
-        const tFreq = noteToFreq(root + 7);
-        let tp = 0;
-        for (let i = 0; i < timpaniLen; i++) {
-          tp += (2 * Math.PI * tFreq) / sampleRate;
-          const env = (i / timpaniLen); // Crescendo
-          timpaniBuf[i] = Oscillators.sine(tp) * env * (Math.random() * 0.2 + 0.8);
-        }
-        mixClip(masterBuffer, reverb.process(timpaniBuf, 0.5, 0.5), beatStart, 0.55);
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 140, 50), beatStart + Math.floor(samplesPerBeat / 2), 0.65);
+      }
+      if (b % 8 === 0 && b > 0) {
+        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate), 0.5, 0.5), beatStart, 0.8);
       }
     }
   }
@@ -1052,15 +1269,19 @@ function generateProceduralMusic({
   // 8. MINIMAL BACKGROUND / LO-FI BLIPS
   else if (genre === 'minimal') {
     const root = getMidiRoot(key, 3);
+    const chords = customChords || [root, root + 5, root + 7, root];
+
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
       const beatInBar = b % 4;
+      const barIdx = Math.floor(b / 4) % chords.length;
+      const chordRoot = chords[barIdx];
 
       // Soft Sub Pulse on 1
       if (beatInBar === 0) {
         const subLen = Math.floor(samplesPerBeat * 1.5);
         const subBuf = new Float32Array(subLen);
-        const sFreq = noteToFreq(root - 12);
+        const sFreq = noteToFreq(chordRoot - 12);
         let sp = 0;
         for (let i = 0; i < subLen; i++) {
           sp += (2 * Math.PI * sFreq) / sampleRate;
@@ -1069,23 +1290,18 @@ function generateProceduralMusic({
         mixClip(masterBuffer, subBuf, beatStart, 0.6);
       }
 
-      // Delicate Rhodes-like Sine Triad on beat 2
+      // Rhodes-like FM Electric Piano Triad on beat 2
       if (beatInBar === 1) {
-        const chordLen = Math.floor(samplesPerBeat * 2.0);
-        const chordBuf = new Float32Array(chordLen);
-        const triad = [root, root + 7, root + 10]; // minor 7th
+        const triad = [chordRoot, chordRoot + 7, chordRoot + 10]; // minor 7th
         triad.forEach(m => {
-          const f = noteToFreq(m);
-          let cp = 0;
-          for (let i = 0; i < chordLen; i++) {
-            cp += (2 * Math.PI * f) / sampleRate;
-            chordBuf[i] += Oscillators.sine(cp) * Math.exp(-(i / chordLen) * 2.5) * 0.15;
-          }
+          const rhodes = SynthInstruments.fmNote(noteToFreq(m), beatDuration * 1.8, sampleRate, {
+            modRatio: 2.0, modIndex: 1.5, decay: 2.5
+          });
+          mixClip(masterBuffer, rhodes, beatStart, 0.25);
         });
-        mixClip(masterBuffer, chordBuf, beatStart, 0.5);
       }
 
-      // Micro Percussion Click (Highpass blip) on offbeat 16ths
+      // Micro Percussion Click on offbeat
       const clickBuf = new Float32Array(Math.floor(0.015 * sampleRate));
       for (let i = 0; i < clickBuf.length; i++) {
         clickBuf[i] = (Math.random() * 2.0 - 1.0) * Math.exp(-i / (0.003 * sampleRate));
@@ -1097,10 +1313,10 @@ function generateProceduralMusic({
   // 9. AMBIENT / CHILL SOUNDSCAPE (DEFAULT)
   else {
     const root = getMidiRoot(key, 3);
+    const chords = customChords || [root, root + 5, root - 2, root];
     const pentatonic = [0, 2, 4, 7, 9, 12, 14, 16];
-    const reverb = new AlgorithmicReverb();
 
-    // Soft warm pad chord (Major 7th / 9th)
+    // Soft warm pad chord
     const padChord = [root, root + 4, root + 7, root + 11];
     const padLength = totalSamples;
     const padBuf = new Float32Array(padLength);
@@ -1109,31 +1325,34 @@ function generateProceduralMusic({
       let p = 0;
       for (let i = 0; i < padLength; i++) {
         p += (2 * Math.PI * f) / sampleRate;
-        // Slow filter / amplitude swell
         const swell = 0.5 + 0.5 * Math.sin((i / sampleRate) * 0.5);
         padBuf[i] += Oscillators.sine(p) * swell * 0.15;
       }
     });
     mixClip(masterBuffer, padBuf, 0, 0.6);
 
-    // Generative sparse chimes
+    // Generative sparse FM bell chimes
     for (let b = 0; b < totalBeats; b += 2) {
-      if (Math.random() > 0.3) {
-        const chimeMidi = root + 12 + pentatonic[Math.floor(Math.random() * pentatonic.length)];
-        const cFreq = noteToFreq(chimeMidi);
-        const chimeDur = Math.floor(samplesPerBeat * 2);
-        const chimeBuf = new Float32Array(chimeDur);
-        let cp = 0;
-        for (let i = 0; i < chimeDur; i++) {
-          cp += (2 * Math.PI * cFreq) / sampleRate;
-          chimeBuf[i] = Oscillators.sine(cp) * Math.exp(-(i / chimeDur) * 4.0);
-        }
-        mixClip(masterBuffer, reverb.process(chimeBuf, 0.55, 0.5), b * samplesPerBeat, 0.35);
+      if (rng() > 0.35) {
+        const chimeMidi = root + 12 + pentatonic[Math.floor(rng() * pentatonic.length)];
+        const bell = SynthInstruments.fmNote(noteToFreq(chimeMidi), beatDuration * 2.2, sampleRate, {
+          modRatio: 2.5, modIndex: 2.2, decay: 3.5
+        });
+        mixClip(masterBuffer, reverb.process(bell, 0.55, 0.5), b * samplesPerBeat, 0.35);
       }
     }
   }
 
-  return normalizeAndLimit(masterBuffer);
+  const output = normalizeAndLimit(masterBuffer);
+  // Attach reproducible metadata
+  output.seed = actualSeed;
+  output.bpm = safeBpm;
+  output.durationSeconds = safeDur;
+  output.genre = genre;
+  output.key = key;
+  output.scale = scaleName;
+
+  return output;
 }
 
 function mixClip(destination, source, startIndex, gain = 1.0) {
@@ -1147,122 +1366,238 @@ function mixClip(destination, source, startIndex, gain = 1.0) {
 // 4. RULE-BASED PROMPT PARSER (TEXT -> PROCEDURAL AUDIO)
 // ============================================================================
 
+/**
+ * Parses user prompt to extract audio parameters (duration, BPM, mood, key, scale, genre, seed).
+ * Honest rule-based extraction without neural models or random silent fallbacks.
+ */
 function parseProceduralPrompt(promptText) {
   const text = (promptText || '').toLowerCase().trim();
+  if (!text) {
+    return {
+      error: 'UNSUPPORTED_PROMPT',
+      supported: false,
+      detail: 'Prompt string is empty. Please provide descriptive audio instructions.',
+      method: 'rule_based_procedural_dsp',
+      label: 'Rule-Based Procedural DSP Engine'
+    };
+  }
 
-  // 1. Detect Sound Effects Keywords First
+  // --- PARAMETER EXTRACTION ---
+
+  // 1. Duration Extraction
+  let extractedDur = null;
+  const durMatch = text.match(/(?:for\s+)?(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\b/);
+  if (durMatch) {
+    extractedDur = Math.max(1.0, Math.min(120.0, parseFloat(durMatch[1])));
+  } else if (text.includes('half minute') || text.includes('30s')) {
+    extractedDur = 30.0;
+  } else if (text.includes('one minute') || text.includes('1 minute') || text.includes('60s')) {
+    extractedDur = 60.0;
+  }
+
+  // 2. BPM / Tempo Extraction
+  let extractedBpm = null;
+  const bpmMatch = text.match(/(\d{2,3})\s*bpm\b/) || text.match(/tempo\s*(?:of\s*)?(\d{2,3})\b/);
+  if (bpmMatch) {
+    extractedBpm = Math.max(40, Math.min(240, parseInt(bpmMatch[1], 10)));
+  } else if (text.includes('very fast') || text.includes('rapid') || text.includes('frantic')) {
+    extractedBpm = 160;
+  } else if (text.includes('fast') || text.includes('upbeat') || text.includes('energetic')) {
+    extractedBpm = 135;
+  } else if (text.includes('slow') || text.includes('relaxed') || text.includes('chill')) {
+    extractedBpm = 75;
+  } else if (text.includes('very slow')) {
+    extractedBpm = 60;
+  }
+
+  // 3. Musical Key & Tonic Extraction
+  let extractedKey = null;
+  const keyMatch = text.match(/(?:in the key of|in key of|key of|in)\s+([a-gA-G][#b]?)\s*(major|minor)?\b/) || text.match(/\b([a-gA-G][#b]?)\s+(major|minor)\b/);
+  if (keyMatch) {
+    const rawKey = keyMatch[1].toUpperCase();
+    if (NOTE_MAP[rawKey] !== undefined) {
+      extractedKey = (rawKey === 'DB') ? 'C#' : (rawKey === 'EB') ? 'D#' : (rawKey === 'GB') ? 'F#' : (rawKey === 'AB') ? 'G#' : (rawKey === 'BB') ? 'A#' : rawKey;
+    }
+  }
+
+  // 4. Scale Extraction
+  let extractedScale = null;
+  const scaleKeywords = [
+    { key: 'harmonic minor', scale: 'harmonic_minor' },
+    { key: 'melodic minor', scale: 'melodic_minor' },
+    { key: 'pentatonic major', scale: 'pentatonic_major' },
+    { key: 'pentatonic minor', scale: 'pentatonic_minor' },
+    { key: 'pentatonic', scale: 'pentatonic' },
+    { key: 'dorian', scale: 'dorian' },
+    { key: 'phrygian', scale: 'phrygian' },
+    { key: 'lydian', scale: 'lydian' },
+    { key: 'mixolydian', scale: 'mixolydian' },
+    { key: 'blues', scale: 'blues' },
+    { key: 'minor', scale: 'minor' },
+    { key: 'major', scale: 'major' }
+  ];
+  for (const item of scaleKeywords) {
+    if (text.includes(item.key)) {
+      extractedScale = item.scale;
+      break;
+    }
+  }
+
+  // 5. Mood Extraction
+  let extractedMood = null;
+  const moodKeywords = ['dark', 'happy', 'sad', 'mysterious', 'tense', 'relaxed', 'energetic', 'melancholy', 'epic', 'creepy', 'peaceful', 'aggressive', 'playful', 'funny', 'dramatic'];
+  for (const m of moodKeywords) {
+    if (text.includes(m)) {
+      extractedMood = m;
+      break;
+    }
+  }
+
+  // 6. Seed Extraction
+  let extractedSeed = null;
+  const seedMatch = text.match(/seed\s*[:=]?\s*([a-zA-Z0-9_-]+)/);
+  if (seedMatch) {
+    extractedSeed = seedMatch[1];
+  }
+
+  // --- SOUND EFFECT DETECTION ---
   const sfxCategories = [
-    { preset: 'cartoon_boing', category: 'comedy', keys: ['boing', 'spring', 'bounce'] },
-    { preset: 'funny_pop', category: 'comedy', keys: ['pop', 'plop', 'bubble'] },
-    { preset: 'punch_impact', category: 'action', keys: ['punch', 'hit', 'smack', 'slap'] },
-    { preset: 'falling_sound', category: 'comedy', keys: ['fall', 'falling', 'whistle down', 'slide'] },
-    { preset: 'record_scratch', category: 'hiphop', keys: ['scratch', 'record scratch', 'rewind'] },
-    { preset: 'bass_drop', category: 'electronic', keys: ['bass drop', 'sub drop', '808 drop', '808 bass'] },
-    { preset: 'dramatic_impact', category: 'cinematic', keys: ['dramatic impact', 'reveal', 'braam', 'boom', 'impact'] },
-    { preset: 'whoosh', category: 'transition', keys: ['whoosh', 'swoosh', 'swish', 'pass by'] },
-    { preset: 'glitch', category: 'retro', keys: ['glitch', 'stutter', 'static', 'digital error'] },
-    { preset: 'riser', category: 'buildup', keys: ['riser', 'buildup', 'sweep up', 'rise'] },
-    { preset: 'suspense_effect', category: 'horror', keys: ['suspense sound', 'suspense effect', 'creepy sound', 'eerie ping'] },
-    { preset: 'retro_coin', category: 'gaming', keys: ['coin', 'pickup', 'collect'] },
-    { preset: 'retro_jump', category: 'gaming', keys: ['jump', 'leap'] },
-    { preset: 'retro_laser', category: 'gaming', keys: ['laser', 'phaser', 'zap', 'pew'] },
-    { preset: 'notification_chime', category: 'ui', keys: ['chime', 'bell', 'notification', 'ding', 'alert'] },
-    { preset: 'comedic_transition', category: 'comedy', keys: ['fail', 'wah wah', 'sad trombone', 'comedic transition'] }
+    { preset: 'cartoon_boing', category: 'comedy', keys: ['boing', 'spring', 'bounce', 'cartoon bounce'] },
+    { preset: 'funny_pop', category: 'comedy', keys: ['pop', 'plop', 'bubble pop', 'bubble'] },
+    { preset: 'punch_impact', category: 'action', keys: ['punch', 'impact hit', 'smack', 'slap', 'hit sound', 'fist'] },
+    { preset: 'falling_sound', category: 'comedy', keys: ['fall', 'falling', 'whistle down', 'slide down', 'drop whistle'] },
+    { preset: 'record_scratch', category: 'hiphop', keys: ['record scratch', 'scratch sound', 'turntable scratch', 'dj scratch', 'scratch'] },
+    { preset: 'bass_drop', category: 'electronic', keys: ['bass drop', 'sub drop', '808 drop', '808 bass', 'sub boom drop'] },
+    { preset: 'dramatic_impact', category: 'cinematic', keys: ['dramatic impact', 'dramatic reveal', 'reveal sound', 'braam', 'cinematic boom', 'orchestral hit', 'reveal', 'impact'] },
+    { preset: 'whoosh', category: 'transition', keys: ['whoosh', 'swoosh', 'swish', 'flyby', 'pass by'] },
+    { preset: 'glitch', category: 'retro', keys: ['digital glitch', 'stutter', 'static noise', 'digital error', 'glitch'] },
+    { preset: 'riser', category: 'buildup', keys: ['riser', 'buildup riser', 'sweep up', 'pitch rise'] },
+    { preset: 'suspense_effect', category: 'horror', keys: ['suspense effect', 'suspense sound', 'creepy cue', 'eerie ping', 'horror sting'] },
+    { preset: 'retro_coin', category: 'gaming', keys: ['retro coin', 'pickup sound', 'coin sound', 'collect coin', 'coin'] },
+    { preset: 'retro_jump', category: 'gaming', keys: ['retro jump', 'jump sound', '8-bit jump', '8bit jump', 'jump'] },
+    { preset: 'retro_laser', category: 'gaming', keys: ['laser zap', 'phaser', 'pew pew', 'arcade zap', 'laser'] },
+    { preset: 'notification_chime', category: 'ui', keys: ['bell chime', 'notification sound', 'ui ding', 'alert chime', 'chime', 'notification'] },
+    { preset: 'comedic_transition', category: 'comedy', keys: ['wah wah', 'fail sound', 'failure trombone', 'sad trombone', 'comedic transition', 'fail'] }
   ];
 
-  // If the prompt explicitly mentions music, song, beat, or theme, prioritize music detection
   const isExplicitMusic = text.includes('music') || text.includes('song') || text.includes('theme') || text.includes('beat') || text.includes('track') || text.includes('groove');
+  const isExplicitSfx = text.includes('sfx') || text.includes('sound effect') || text.includes('sound') || text.includes('fx');
 
-  if (!isExplicitMusic) {
+  // Try matching SFX first if not explicitly marked as music
+  if (!isExplicitMusic || isExplicitSfx) {
     for (const item of sfxCategories) {
       if (item.keys.some(k => text.includes(k))) {
         return {
           type: 'sfx',
           preset: item.preset,
           category: item.category,
+          durationSeconds: extractedDur || 1.0,
+          mood: extractedMood,
+          seed: extractedSeed,
+          extracted_params: {
+            durationSeconds: extractedDur,
+            mood: extractedMood,
+            seed: extractedSeed
+          },
           prompt: promptText,
-          method: 'procedural_dsp',
+          method: 'rule_based_procedural_dsp',
+          label: 'Rule-Based Procedural DSP Engine',
           description: `Procedurally synthesized sound effect: ${item.preset}`
         };
       }
     }
   }
 
-  // 2. Detect Music Keywords & Moods
+  // --- MUSIC DETECTION ---
   const musicDefinitions = [
-    { genre: '8bit_retro', bpm: 136, key: 'C', keys: ['8bit', '8-bit', 'chiptune', 'retro game', 'retro', 'arcade'] },
-    { genre: 'electronic', bpm: 124, key: 'F', keys: ['electronic', 'edm', 'synthwave', 'techno', 'house'] },
-    { genre: 'comedy', bpm: 120, key: 'C', keys: ['comedy', 'funny', 'cartoon music', 'ragtime', 'polka', 'oompah'] },
-    { genre: 'suspense', bpm: 72, key: 'D', keys: ['suspense', 'dark', 'horror', 'creepy', 'tension', 'spooky'] },
-    { genre: 'cinematic', bpm: 90, key: 'D', keys: ['cinematic', 'epic', 'orchestral', 'movie', 'soundtrack', 'trailer'] },
-    { genre: 'happy', bpm: 128, key: 'C', keys: ['happy', 'upbeat', 'cheerful', 'joyful', 'bouncy'] },
-    { genre: 'dramatic', bpm: 80, key: 'C', keys: ['dramatic', 'drama', 'intense', 'crescendo'] },
-    { genre: 'minimal', bpm: 88, key: 'C', keys: ['minimal', 'minimalist', 'lofi', 'lo-fi'] },
-    { genre: 'ambient', bpm: 60, key: 'C', keys: ['ambient', 'chill', 'meditation', 'drone', 'soundscape', 'peaceful'] }
+    { genre: '8bit_retro', default_bpm: 136, default_key: 'C', keys: ['8bit', '8-bit', 'chiptune', 'retro game', 'retro', 'arcade'] },
+    { genre: 'electronic', default_bpm: 124, default_key: 'F', keys: ['electronic', 'edm', 'synthwave', 'techno', 'house'] },
+    { genre: 'comedy', default_bpm: 120, default_key: 'C', keys: ['comedy', 'funny', 'cartoon music', 'ragtime', 'polka', 'oompah'] },
+    { genre: 'suspense', default_bpm: 72, default_key: 'D', keys: ['suspense', 'dark', 'horror', 'creepy', 'tension', 'spooky'] },
+    { genre: 'cinematic', default_bpm: 90, default_key: 'D', keys: ['cinematic', 'epic', 'orchestral', 'movie', 'soundtrack', 'trailer'] },
+    { genre: 'happy', default_bpm: 128, default_key: 'C', keys: ['happy', 'upbeat', 'cheerful', 'joyful', 'bouncy'] },
+    { genre: 'dramatic', default_bpm: 80, default_key: 'C', keys: ['dramatic', 'drama', 'intense', 'crescendo'] },
+    { genre: 'minimal', default_bpm: 88, default_key: 'C', keys: ['minimal', 'minimalist', 'lofi', 'lo-fi'] },
+    { genre: 'ambient', default_bpm: 60, default_key: 'C', keys: ['ambient', 'chill', 'meditation', 'drone', 'soundscape', 'peaceful'] }
   ];
 
   for (const item of musicDefinitions) {
     if (item.keys.some(k => text.includes(k))) {
+      const finalBpm = extractedBpm || item.default_bpm;
+      const finalKey = extractedKey || item.default_key;
+      const finalDur = extractedDur || 12.0;
       return {
         type: 'music',
         genre: item.genre,
-        bpm: item.bpm,
-        key: item.key,
-        durationSeconds: 12.0,
+        bpm: finalBpm,
+        key: finalKey,
+        scale: extractedScale || (item.genre === 'happy' ? 'major' : 'minor'),
+        durationSeconds: finalDur,
+        mood: extractedMood,
+        seed: extractedSeed,
+        extracted_params: {
+          bpm: extractedBpm,
+          key: extractedKey,
+          scale: extractedScale,
+          durationSeconds: extractedDur,
+          mood: extractedMood,
+          genre: item.genre,
+          seed: extractedSeed
+        },
         prompt: promptText,
-        method: 'procedural_dsp',
-        description: `Procedurally composed music track: ${item.genre} (${item.bpm} BPM, Key of ${item.key})`
+        method: 'rule_based_procedural_dsp',
+        label: 'Rule-Based Procedural DSP Engine',
+        description: `Procedurally composed music track: ${item.genre} (${finalBpm} BPM, Key of ${finalKey})`
       };
     }
   }
 
-  // Check SFX if explicit music check was bypassed earlier
-  if (isExplicitMusic) {
-    for (const item of sfxCategories) {
-      if (item.keys.some(k => text.includes(k))) {
-        return {
-          type: 'sfx',
-          preset: item.preset,
-          category: item.category,
-          prompt: promptText,
-          method: 'procedural_dsp',
-          description: `Procedurally synthesized sound effect: ${item.preset}`
-        };
-      }
-    }
-  }
-
-  // Generic fallback if mentions "background" or "music"
-  if (text.includes('background') || text.includes('music')) {
+  // Generic fallback if user explicitly mentions "background music" or "music"
+  if (text.includes('background') || text.includes('music') || text.includes('melody') || text.includes('song')) {
+    const finalBpm = extractedBpm || 88;
+    const finalKey = extractedKey || 'C';
+    const finalDur = extractedDur || 12.0;
     return {
       type: 'music',
       genre: 'minimal',
-      bpm: 88,
-      key: 'C',
-      durationSeconds: 12.0,
+      bpm: finalBpm,
+      key: finalKey,
+      scale: extractedScale || 'minor',
+      durationSeconds: finalDur,
+      mood: extractedMood,
+      seed: extractedSeed,
+      extracted_params: {
+        bpm: extractedBpm,
+        key: extractedKey,
+        scale: extractedScale,
+        durationSeconds: extractedDur,
+        mood: extractedMood,
+        genre: 'minimal',
+        seed: extractedSeed
+      },
       prompt: promptText,
-      method: 'procedural_dsp',
-      description: 'Procedurally composed minimal background music'
+      method: 'rule_based_procedural_dsp',
+      label: 'Rule-Based Procedural DSP Engine',
+      description: `Procedurally composed background music (${finalBpm} BPM, Key of ${finalKey})`
     };
   }
 
-  // Default fallback: 8-bit retro gaming sound
+  // Return a clear unsupported-prompt response rather than silently generating random fallback audio
   return {
-    type: 'sfx',
-    preset: 'retro_coin',
-    category: 'gaming',
-    prompt: promptText,
-    method: 'procedural_dsp',
-    description: 'Procedurally synthesized retro sound effect'
+    error: 'UNSUPPORTED_PROMPT',
+    supported: false,
+    detail: `Prompt "${promptText}" is not recognized as a procedural audio request. Please specify a sound effect (e.g. 'cartoon boing', 'laser zap', 'impact hit') or music instructions (e.g. '120 bpm synthwave in A minor for 10 seconds').`,
+    method: 'rule_based_procedural_dsp',
+    label: 'Rule-Based Procedural DSP Engine'
   };
 }
 
 // ============================================================================
-// 5. MULTITRACK MEME AUDIO STUDIO MIXER
+// 5. MULTITRACK MEME AUDIO STUDIO MIXER WITH GENUINE DUCKING
 // ============================================================================
 
 /**
- * Mix Multiple Audio Tracks with Offsets, Fades, Volume, and Ducking
+ * Mix Multiple Audio Tracks with Offsets, Fades, Trimming, Volume Automation, and Genuine Speech-Triggered Ducking
  */
 async function renderMultitrackMix({
   tracks = [],
@@ -1270,21 +1605,20 @@ async function renderMultitrackMix({
   format = 'wav',
   sampleRate = SAMPLE_RATE
 }) {
-  if (tracks.length === 0) throw new Error('No tracks provided for multitrack mixing.');
+  if (!Array.isArray(tracks) || tracks.length === 0) {
+    throw new Error('At least one track required for multitrack mixing.');
+  }
 
-  // Calculate total duration in samples
-  let maxSamples = 0;
   const loadedTracks = [];
+  let maxSamples = 0;
 
+  // 1. Load, trim, fade, and stage each track
   for (const tr of tracks) {
-    const startSec = parseFloat(tr.start_time || 0);
-    const volume = Math.max(0, Math.min(parseFloat(tr.volume !== undefined ? tr.volume : 1.0), 3.0));
-    let buffer = null;
+    let rawBuffer = null;
 
     if (tr.buffer && tr.buffer instanceof Float32Array) {
-      buffer = tr.buffer;
+      rawBuffer = tr.buffer;
     } else if (tr.file_path && fs.existsSync(tr.file_path)) {
-      // Decode audio file to raw Float32Array using FFmpeg
       const rawPcm = execFileSync('ffmpeg.exe', [
         '-i', tr.file_path,
         '-f', 'f32le',
@@ -1292,53 +1626,211 @@ async function renderMultitrackMix({
         '-ar', String(sampleRate),
         '-'
       ], { maxBuffer: 100 * 1024 * 1024 });
-      buffer = new Float32Array(rawPcm.buffer, rawPcm.byteOffset, rawPcm.length / 4);
+      rawBuffer = new Float32Array(rawPcm.buffer, rawPcm.byteOffset, rawPcm.length / 4);
+    } else if (tr.file_name) {
+      const candidatePath = path.isAbsolute(tr.file_name) ? tr.file_name : path.join(AUDIO_DIR, path.basename(tr.file_name));
+      if (fs.existsSync(candidatePath)) {
+        const rawPcm = execFileSync('ffmpeg.exe', [
+          '-i', candidatePath,
+          '-f', 'f32le',
+          '-ac', '1',
+          '-ar', String(sampleRate),
+          '-'
+        ], { maxBuffer: 100 * 1024 * 1024 });
+        rawBuffer = new Float32Array(rawPcm.buffer, rawPcm.byteOffset, rawPcm.length / 4);
+      }
     } else if (tr.sfx_preset && SoundEffectGenerators[tr.sfx_preset]) {
-      buffer = SoundEffectGenerators[tr.sfx_preset]();
+      rawBuffer = SoundEffectGenerators[tr.sfx_preset]();
     } else if (tr.music_genre) {
-      buffer = generateProceduralMusic({
+      rawBuffer = generateProceduralMusic({
         genre: tr.music_genre,
         bpm: tr.bpm || 120,
         durationSeconds: tr.duration || 10.0,
+        seed: tr.seed,
         sampleRate
       });
     }
 
-    if (buffer) {
-      const startSample = Math.floor(startSec * sampleRate);
-      const endSample = startSample + buffer.length;
-      if (endSample > maxSamples) maxSamples = endSample;
-      loadedTracks.push({
-        name: tr.name || 'Track',
-        buffer,
-        startSample,
-        volume,
-        isDucked: tr.is_ducked || false
-      });
+    if (!rawBuffer || rawBuffer.length === 0) continue;
+
+    // A. Trimming
+    const trimStartSec = Math.max(0, parseFloat(tr.trim_start || 0));
+    const trimStartSamples = Math.floor(trimStartSec * sampleRate);
+    let activeSamples = Math.max(0, rawBuffer.length - trimStartSamples);
+
+    if (tr.trim_duration !== undefined || tr.duration !== undefined) {
+      const durSec = parseFloat(tr.trim_duration !== undefined ? tr.trim_duration : tr.duration);
+      if (durSec > 0) {
+        activeSamples = Math.min(activeSamples, Math.floor(durSec * sampleRate));
+      }
     }
+    if (activeSamples <= 0) continue;
+
+    const clipBuf = new Float32Array(activeSamples);
+    for (let i = 0; i < activeSamples; i++) {
+      clipBuf[i] = rawBuffer[trimStartSamples + i];
+    }
+
+    // B. Fades (Smooth Cosine Curves)
+    const fadeInMs = parseFloat(tr.fade_in_ms || 0);
+    const fadeOutMs = parseFloat(tr.fade_out_ms || 0);
+    const fadeInSamples = Math.floor((fadeInMs / 1000) * sampleRate);
+    const fadeOutSamples = Math.floor((fadeOutMs / 1000) * sampleRate);
+
+    for (let i = 0; i < activeSamples; i++) {
+      let g = 1.0;
+      if (fadeInSamples > 0 && i < fadeInSamples) {
+        g *= 0.5 * (1.0 - Math.cos((Math.PI * i) / fadeInSamples));
+      }
+      const fromEnd = activeSamples - 1 - i;
+      if (fadeOutSamples > 0 && fromEnd < fadeOutSamples) {
+        g *= 0.5 * (1.0 - Math.cos((Math.PI * fromEnd) / fadeOutSamples));
+      }
+      clipBuf[i] *= g;
+    }
+
+    // C. Volume & Keyframed Automation
+    const baseVol = Math.max(0, Math.min(parseFloat(tr.volume !== undefined ? tr.volume : 1.0), 3.0));
+    if (Array.isArray(tr.volume_automation) && tr.volume_automation.length > 1) {
+      const kfs = [...tr.volume_automation].sort((a, b) => a.time - b.time);
+      for (let i = 0; i < activeSamples; i++) {
+        const t = i / sampleRate;
+        let volAtT = baseVol;
+        if (t <= kfs[0].time) {
+          volAtT = kfs[0].volume;
+        } else if (t >= kfs[kfs.length - 1].time) {
+          volAtT = kfs[kfs.length - 1].volume;
+        } else {
+          for (let k = 0; k < kfs.length - 1; k++) {
+            if (t >= kfs[k].time && t <= kfs[k + 1].time) {
+              const span = kfs[k + 1].time - kfs[k].time;
+              const frac = span > 0.0001 ? (t - kfs[k].time) / span : 0;
+              volAtT = kfs[k].volume + frac * (kfs[k + 1].volume - kfs[k].volume);
+              break;
+            }
+          }
+        }
+        clipBuf[i] *= volAtT;
+      }
+    } else {
+      for (let i = 0; i < activeSamples; i++) {
+        clipBuf[i] *= baseVol;
+      }
+    }
+
+    // Timeline positioning
+    const startSec = Math.max(0, parseFloat(tr.start_time || 0));
+    const startSample = Math.floor(startSec * sampleRate);
+    const endSample = startSample + clipBuf.length;
+    if (endSample > maxSamples) maxSamples = endSample;
+
+    // Track classification for speech ducking
+    const isSpeech = Boolean(
+      tr.is_speech ||
+      tr.type === 'speech' ||
+      (tr.name && /speech|voice|vocal|dialogue/i.test(tr.name))
+    );
+    const isDucked = Boolean(
+      tr.is_ducked ||
+      tr.type === 'music' ||
+      Boolean(tr.music_genre)
+    );
+
+    loadedTracks.push({
+      name: tr.name || 'Track',
+      buffer: clipBuf,
+      startSample,
+      volume: baseVol,
+      isSpeech,
+      isDucked
+    });
   }
 
-  const masterMix = new Float32Array(maxSamples);
+  if (loadedTracks.length === 0) {
+    throw new Error('No valid audio clips could be decoded for mixing.');
+  }
 
-  // Mix all tracks into master
-  for (const tr of loadedTracks) {
-    for (let i = 0; i < tr.buffer.length; i++) {
-      const destIdx = tr.startSample + i;
-      if (destIdx < maxSamples) {
-        masterMix[destIdx] += tr.buffer[i] * tr.volume;
+  // 2. Genuine Speech-Triggered Background Music Ducking
+  let duckingApplied = false;
+  let maxAttenuationDb = 0;
+  const speechTracks = loadedTracks.filter(t => t.isSpeech);
+  const duckedTracks = loadedTracks.filter(t => t.isDucked);
+
+  if (speechTracks.length > 0 && duckedTracks.length > 0) {
+    // A. Build composite speech amplitude envelope
+    const rawSpeechEnv = new Float32Array(maxSamples);
+    for (const st of speechTracks) {
+      const end = Math.min(maxSamples, st.startSample + st.buffer.length);
+      for (let i = st.startSample, j = 0; i < end; i++, j++) {
+        const abs = Math.abs(st.buffer[j]);
+        if (abs > rawSpeechEnv[i]) rawSpeechEnv[i] = abs;
+      }
+    }
+
+    // B. Smooth envelope follower (attack ~15ms, release ~250ms)
+    const attackCoeff = Math.exp(-1.0 / (0.015 * sampleRate));
+    const releaseCoeff = Math.exp(-1.0 / (0.250 * sampleRate));
+    const smoothedEnv = new Float32Array(maxSamples);
+    let envVal = 0.0;
+    for (let i = 0; i < maxSamples; i++) {
+      const s = rawSpeechEnv[i];
+      if (s > envVal) {
+        envVal = attackCoeff * envVal + (1.0 - attackCoeff) * s;
+      } else {
+        envVal = releaseCoeff * envVal + (1.0 - releaseCoeff) * s;
+      }
+      smoothedEnv[i] = envVal;
+    }
+
+    // C. Calculate attenuation curve (~10.5 dB ducking during speech)
+    const threshold = 0.025; // -32 dBFS
+    const duckDepth = 0.70;  // 70% reduction in linear amplitude
+    const duckCurve = new Float32Array(maxSamples);
+    let maxAtten = 0.0;
+
+    for (let i = 0; i < maxSamples; i++) {
+      const env = smoothedEnv[i];
+      if (env > threshold) {
+        const factor = Math.min(1.0, (env - threshold) / 0.12);
+        const atten = duckDepth * factor;
+        if (atten > maxAtten) maxAtten = atten;
+        duckCurve[i] = 1.0 - atten;
+      } else {
+        duckCurve[i] = 1.0;
+      }
+    }
+
+    // D. Apply ducking attenuation to background music
+    if (maxAtten > 0.05) {
+      duckingApplied = true;
+      maxAttenuationDb = Math.round(-20 * Math.log10(Math.max(0.001, 1.0 - maxAtten)) * 10) / 10;
+      for (const dt of duckedTracks) {
+        const end = Math.min(maxSamples, dt.startSample + dt.buffer.length);
+        for (let i = dt.startSample, j = 0; i < end; i++, j++) {
+          dt.buffer[j] *= duckCurve[i];
+        }
       }
     }
   }
 
-  // Master limiting & soft saturation
+  // 3. Mix all tracks into master buffer
+  const masterMix = new Float32Array(maxSamples);
+  for (const tr of loadedTracks) {
+    const end = Math.min(maxSamples, tr.startSample + tr.buffer.length);
+    for (let i = tr.startSample, j = 0; i < end; i++, j++) {
+      masterMix[i] += tr.buffer[j];
+    }
+  }
+
+  // 4. Master Normalization & Brickwall Limiting
   normalizeAndLimit(masterMix, -1.0);
 
-  // Export to WAV
+  // 5. Export WAV
   const wavBuffer = floatToWavBuffer(masterMix, sampleRate);
   const tempWav = outputPath.endsWith('.wav') ? outputPath : outputPath + '.tmp.wav';
   fs.writeFileSync(tempWav, wavBuffer);
 
-  // Transcode to MP3 if requested
+  // 6. Transcode to MP3 if requested
   if (format === 'mp3') {
     execFileSync('ffmpeg.exe', [
       '-y',
@@ -1353,12 +1845,16 @@ async function renderMultitrackMix({
   return {
     outputPath,
     durationSeconds: Math.round((maxSamples / sampleRate) * 100) / 100,
-    trackCount: loadedTracks.length
+    trackCount: loadedTracks.length,
+    sampleRate,
+    duckingApplied,
+    maxAttenuationDb
   };
 }
 
 module.exports = {
   SAMPLE_RATE,
+  createRng,
   Oscillators,
   PinkNoise,
   BiquadFilter,
@@ -1369,7 +1865,11 @@ module.exports = {
   normalizeAndLimit,
   floatToWavBuffer,
   SoundEffectGenerators,
+  SynthInstruments,
   SynthDrums,
+  SCALES,
+  NOTE_MAP,
+  parseProgression,
   generateProceduralMusic,
   parseProceduralPrompt,
   renderMultitrackMix,

@@ -819,7 +819,7 @@ const server = http.createServer(async (req, res) => {
       const body = await getBody();
       const genre = body.genre || '8bit_retro';
       const bpm = parseInt(body.bpm || 120, 10);
-      const duration = Math.max(3.0, Math.min(parseFloat(body.duration || 12.0), 120.0));
+      const duration = Math.max(1.0, Math.min(parseFloat(body.duration || 12.0), 120.0));
       const key = body.key || 'C';
 
       const buffer = proceduralEngine.generateProceduralMusic({
@@ -827,6 +827,9 @@ const server = http.createServer(async (req, res) => {
         bpm,
         durationSeconds: duration,
         key,
+        scale: body.scale,
+        progression: body.progression,
+        seed: body.seed,
         sampleRate: proceduralEngine.SAMPLE_RATE
       });
 
@@ -841,6 +844,8 @@ const server = http.createServer(async (req, res) => {
         genre: genre,
         bpm: bpm,
         key: key,
+        scale: buffer.scale,
+        seed: buffer.seed,
         audio_url: `/api/audio/file/${musicId}`,
         file_name: musicId,
         duration_seconds: quality.duration_seconds,
@@ -855,6 +860,15 @@ const server = http.createServer(async (req, res) => {
       if (!prompt) return sendJson(400, { detail: 'Prompt string is required.' });
 
       const parsed = proceduralEngine.parseProceduralPrompt(prompt);
+      if (parsed.error) {
+        return sendJson(400, {
+          detail: parsed.detail,
+          error: parsed.error,
+          method: parsed.method,
+          label: parsed.label
+        });
+      }
+
       let buffer, filename;
 
       if (parsed.type === 'music') {
@@ -863,12 +877,14 @@ const server = http.createServer(async (req, res) => {
           bpm: parsed.bpm,
           durationSeconds: parsed.durationSeconds || 12.0,
           key: parsed.key,
+          scale: parsed.scale,
+          seed: parsed.seed,
           sampleRate: proceduralEngine.SAMPLE_RATE
         });
         filename = `prompt_music_${parsed.genre}_${crypto.randomBytes(4).toString('hex')}.wav`;
       } else {
         const fn = proceduralEngine.SoundEffectGenerators[parsed.preset] || proceduralEngine.SoundEffectGenerators.cartoon_boing;
-        buffer = fn();
+        buffer = fn({ duration: parsed.durationSeconds });
         filename = `prompt_sfx_${parsed.preset}_${crypto.randomBytes(4).toString('hex')}.wav`;
       }
 
@@ -919,6 +935,8 @@ const server = http.createServer(async (req, res) => {
         duration_seconds: quality.duration_seconds,
         track_count: mixResult.trackCount,
         format: format,
+        ducking_applied: mixResult.duckingApplied,
+        max_attenuation_db: mixResult.maxAttenuationDb,
         quality: quality
       });
     }

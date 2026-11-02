@@ -1191,106 +1191,50 @@
 
       <!-- TAB: MEME AUDIO STUDIO (MULTITRACK TIMELINE) -->
       <section id="memeTab" class="view-panel">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
           <div>
-            <h2 style="font-size:18px; font-weight:700;">Meme Audio Studio & Multitrack Mixer</h2>
+            <h2 style="font-size:18px; font-weight:700;">Meme Audio Studio & Multitrack Timeline</h2>
             <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">
-              Combine Speech Audio + Procedural Background Music + Procedural Sound Effects into a Master Production.
+              Multi-stem DAW timeline with speech-triggered ducking, clip trimming, precision fades, and arbitrary tracks.
             </p>
           </div>
-          <button class="btn-generate" onclick="renderMemeMixUI()">
-            🎛️ Render & Master Multitrack Mix
-          </button>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <div style="display:flex; align-items:center; gap:6px; background:var(--bg-card); padding:4px 8px; border-radius:6px; border:1px solid var(--border-color);">
+              <span style="font-size:11px; color:var(--text-muted);">Format:</span>
+              <select id="memeExportFormat" class="select-dropdown" style="padding:4px 8px; font-size:12px;">
+                <option value="wav">WAV (Lossless 44.1kHz)</option>
+                <option value="mp3">MP3 (libmp3lame 256k)</option>
+              </select>
+            </div>
+            <button class="btn-generate" onclick="addMemeTrack('speech')" style="background:var(--bg-card); border:1px solid var(--border-color); color:var(--text-primary);">
+              ➕ Add Speech
+            </button>
+            <button class="btn-generate" onclick="addMemeTrack('music')" style="background:var(--bg-card); border:1px solid var(--border-color); color:var(--text-primary);">
+              ➕ Add Music
+            </button>
+            <button class="btn-generate" onclick="addMemeTrack('sfx')" style="background:var(--bg-card); border:1px solid var(--border-color); color:var(--text-primary);">
+              ➕ Add SFX
+            </button>
+            <button class="btn-generate" onclick="renderMemeMixUI()">
+              🎛️ Render Master Mix
+            </button>
+          </div>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:12px;">
-          <!-- TRACK 1: SPEECH -->
-          <div class="workspace-col" style="padding:14px; display:grid; grid-template-columns: 160px 1fr 140px; gap:14px; align-items:center;">
-            <div>
-              <div style="font-weight:600; font-size:13px;">🎙️ Track 1: Speech</div>
-              <div style="font-size:11px; color:var(--text-muted);">TTS Voice Audio</div>
-            </div>
-            <div>
-              <input type="text" id="memeTrack1File" class="voice-search-input" placeholder="Enter audio filename or select from recent generations (e.g. gen_a340417c0274.wav)">
-            </div>
-            <div>
-              <label style="font-size:11px; color:var(--text-muted);">Volume: <span id="memeVol1Display">1.0</span></label>
-              <input type="range" id="memeVol1" class="control-slider" min="0.0" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('memeVol1Display').innerText=this.value">
-            </div>
+        <!-- VISUAL TIMELINE RULER & LANES -->
+        <div class="workspace-col" style="padding:12px; margin-bottom:14px; background:var(--bg-card);">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="font-size:12px; font-weight:600; color:var(--text-secondary);">Timeline Overview (0s — 20s+)</div>
+            <div id="memeDuckingStatusBadge" style="font-size:11px; color:var(--text-muted);">Ducking: Speech triggers ~10dB music reduction</div>
           </div>
+          <div id="memeTimelineVisualizer" style="display:flex; flex-direction:column; gap:6px; background:var(--bg-primary); padding:10px; border-radius:6px; border:1px solid var(--border-color); min-height:80px; position:relative; overflow-x:auto;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
 
-          <!-- TRACK 2: PROCEDURAL MUSIC -->
-          <div class="workspace-col" style="padding:14px; display:grid; grid-template-columns: 160px 1fr 140px; gap:14px; align-items:center;">
-            <div>
-              <div style="font-weight:600; font-size:13px;">🎵 Track 2: Music</div>
-              <div style="font-size:11px; color:var(--text-muted);">Procedural Track</div>
-            </div>
-            <div style="display:flex; gap:10px;">
-              <select id="memeMusicGenre" class="select-dropdown" style="flex:1;">
-                <option value="comedy">Comedy Oompah Bounce</option>
-                <option value="8bit_retro">8-Bit Retro Chiptune</option>
-                <option value="electronic">Electronic Synthwave</option>
-                <option value="suspense">Dark Suspense Tension</option>
-                <option value="cinematic">Cinematic Orchestral</option>
-                <option value="happy">Happy Upbeat Groove</option>
-                <option value="dramatic">Dramatic Crescendo</option>
-                <option value="minimal">Minimal Background</option>
-                <option value="ambient">Ambient Soundscape</option>
-              </select>
-              <input type="number" id="memeMusicDur" class="voice-search-input" style="width:90px;" value="8" placeholder="Secs" title="Duration in Seconds">
-            </div>
-            <div>
-              <label style="font-size:11px; color:var(--text-muted);">Volume: <span id="memeVol2Display">0.5</span></label>
-              <input type="range" id="memeVol2" class="control-slider" min="0.0" max="2.0" step="0.05" value="0.5" oninput="document.getElementById('memeVol2Display').innerText=this.value">
-            </div>
-          </div>
-
-          <!-- TRACK 3: SFX 1 -->
-          <div class="workspace-col" style="padding:14px; display:grid; grid-template-columns: 160px 1fr 140px; gap:14px; align-items:center;">
-            <div>
-              <div style="font-weight:600; font-size:13px;">💥 Track 3: Sound Effect 1</div>
-              <div style="font-size:11px; color:var(--text-muted);">Transient Effect</div>
-            </div>
-            <div style="display:flex; gap:10px; align-items:center;">
-              <select id="memeSfx1Select" class="select-dropdown" style="flex:1;">
-                <option value="cartoon_boing">Cartoon Boing</option>
-                <option value="funny_pop">Funny Pop</option>
-                <option value="punch_impact">Punch Impact</option>
-                <option value="record_scratch">Record Scratch</option>
-                <option value="whoosh">Stereo Whoosh</option>
-                <option value="retro_coin">8-Bit Coin</option>
-              </select>
-              <span style="font-size:11px; color:var(--text-muted); white-space:nowrap;">Start at (s):</span>
-              <input type="number" id="memeSfx1Time" class="voice-search-input" style="width:70px;" value="1.5" step="0.2">
-            </div>
-            <div>
-              <label style="font-size:11px; color:var(--text-muted);">Volume: <span id="memeVol3Display">0.9</span></label>
-              <input type="range" id="memeVol3" class="control-slider" min="0.0" max="2.0" step="0.1" value="0.9" oninput="document.getElementById('memeVol3Display').innerText=this.value">
-            </div>
-          </div>
-
-          <!-- TRACK 4: SFX 2 -->
-          <div class="workspace-col" style="padding:14px; display:grid; grid-template-columns: 160px 1fr 140px; gap:14px; align-items:center;">
-            <div>
-              <div style="font-weight:600; font-size:13px;">🎺 Track 4: Sound Effect 2</div>
-              <div style="font-size:11px; color:var(--text-muted);">Punchline / Transition</div>
-            </div>
-            <div style="display:flex; gap:10px; align-items:center;">
-              <select id="memeSfx2Select" class="select-dropdown" style="flex:1;">
-                <option value="comedic_transition">Wah Wah Fail</option>
-                <option value="bass_drop">808 Bass Drop</option>
-                <option value="dramatic_impact">Dramatic Impact</option>
-                <option value="falling_sound">Falling Whistle</option>
-                <option value="glitch">Digital Glitch</option>
-              </select>
-              <span style="font-size:11px; color:var(--text-muted); white-space:nowrap;">Start at (s):</span>
-              <input type="number" id="memeSfx2Time" class="voice-search-input" style="width:70px;" value="3.5" step="0.2">
-            </div>
-            <div>
-              <label style="font-size:11px; color:var(--text-muted);">Volume: <span id="memeVol4Display">1.0</span></label>
-              <input type="range" id="memeVol4" class="control-slider" min="0.0" max="2.0" step="0.1" value="1.0" oninput="document.getElementById('memeVol4Display').innerText=this.value">
-            </div>
-          </div>
+        <!-- DYNAMIC TRACKS LIST -->
+        <div id="memeTracksContainer" style="display:flex; flex-direction:column; gap:12px;">
+          <!-- Dynamically populated by renderMemeTracksUI() -->
         </div>
       </section>
     </main>
@@ -1957,12 +1901,36 @@
           body: JSON.stringify({ prompt })
         });
         const data = await res.json();
+        const card = document.getElementById('promptResultCard');
+        card.style.display = 'block';
+
+        if (res.status === 400 || data.error) {
+          document.getElementById('promptResultHeader').innerText = 'RULE-BASED PROCEDURAL PARSER: UNMATCHED PROMPT';
+          document.getElementById('promptResultHeader').style.color = 'var(--accent-red)';
+          document.getElementById('promptResultBody').innerHTML = `
+            <div style="color:var(--accent-red); font-weight:600;">⚠️ ${data.detail || data.error}</div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">
+              Note: This engine operates on deterministic rule-based DSP synthesis (zero neural models). Please include recognizable sound keywords (e.g. <em>boing, punch, laser, whoosh</em>) or musical parameters (e.g. <em>140bpm dark cinematic music in D minor for 10 seconds</em>).
+            </div>
+          `;
+          return;
+        }
+
         if (data.audio_url) {
-          const card = document.getElementById('promptResultCard');
-          card.style.display = 'block';
+          const params = data.parsed_intent.extracted_params || {};
+          document.getElementById('promptResultHeader').innerText = 'RULE-BASED PROCEDURAL AUDIO SYNTHESIS COMPLETE';
+          document.getElementById('promptResultHeader').style.color = 'var(--accent-blue)';
           document.getElementById('promptResultBody').innerHTML = `
             <div><strong>Parsed Intent:</strong> ${data.parsed_intent.description}</div>
-            <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Generated file: ${data.file_name} • Duration: ${data.duration_seconds}s • SNR: ${data.quality.estimated_snr_db}dB</div>
+            <div style="display:flex; gap:8px; margin-top:6px; flex-wrap:wrap;">
+              ${params.bpm ? `<span class="tag">BPM: ${params.bpm}</span>` : ''}
+              ${params.key ? `<span class="tag">Key: ${params.key}</span>` : ''}
+              ${params.scale ? `<span class="tag">Scale: ${params.scale}</span>` : ''}
+              ${params.mood ? `<span class="tag">Mood: ${params.mood}</span>` : ''}
+              ${params.durationSeconds ? `<span class="tag">Duration: ${params.durationSeconds}s</span>` : ''}
+              <span class="tag" style="background:var(--accent-purple); color:#fff;">Rule-Based DSP</span>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">Generated file: ${data.file_name} • Duration: ${data.duration_seconds}s • SNR: ${data.quality.estimated_snr_db}dB</div>
           `;
           loadAudioTrack(data.audio_url, `Prompt: "${prompt}"`, data.duration_seconds);
         }
@@ -1971,60 +1939,383 @@
       }
     }
 
+    // =========================================================================
+    // MEME AUDIO STUDIO DYNAMIC MULTITRACK TIMELINE
+    // =========================================================================
+
+    let memeTracks = [
+      {
+        id: 'track_' + Math.random().toString(36).substring(2, 8),
+        name: 'Track 1: Main Speech',
+        type: 'speech',
+        file_name: '',
+        start_time: 0.0,
+        trim_start: 0.0,
+        duration: 5.0,
+        fade_in_ms: 50,
+        fade_out_ms: 100,
+        volume: 1.0,
+        is_speech: true,
+        is_ducked: false
+      },
+      {
+        id: 'track_' + Math.random().toString(36).substring(2, 8),
+        name: 'Track 2: Background Music',
+        type: 'music',
+        music_genre: 'comedy',
+        bpm: 120,
+        key: 'C',
+        seed: '12345',
+        start_time: 0.0,
+        trim_start: 0.0,
+        duration: 8.0,
+        fade_in_ms: 100,
+        fade_out_ms: 300,
+        volume: 0.45,
+        is_speech: false,
+        is_ducked: true // Ducks under speech!
+      },
+      {
+        id: 'track_' + Math.random().toString(36).substring(2, 8),
+        name: 'Track 3: Sound Effect Accent',
+        type: 'sfx',
+        sfx_preset: 'cartoon_boing',
+        start_time: 1.5,
+        trim_start: 0.0,
+        duration: 1.2,
+        fade_in_ms: 0,
+        fade_out_ms: 50,
+        volume: 0.9,
+        is_speech: false,
+        is_ducked: false
+      }
+    ];
+
+    let cachedTtsGenerations = [];
+
+    async function loadRecentGenerationsForMeme() {
+      try {
+        const res = await fetch('/api/generations');
+        if (res.ok) {
+          cachedTtsGenerations = await res.json();
+          renderMemeTracksUI();
+        }
+      } catch (e) {
+        console.warn('Could not load generations for Meme Studio:', e);
+      }
+    }
+
+    function addMemeTrack(type = 'sfx') {
+      const idx = memeTracks.length + 1;
+      const defaultNames = {
+        speech: `Track ${idx}: TTS Speech Stem`,
+        music: `Track ${idx}: Music Bed`,
+        sfx: `Track ${idx}: SFX Trigger`
+      };
+
+      memeTracks.push({
+        id: 'track_' + Math.random().toString(36).substring(2, 8),
+        name: defaultNames[type] || `Track ${idx}`,
+        type: type,
+        file_name: '',
+        music_genre: 'electronic',
+        bpm: 120,
+        key: 'C',
+        seed: Math.floor(Math.random() * 100000).toString(),
+        sfx_preset: 'funny_pop',
+        start_time: 0.0,
+        trim_start: 0.0,
+        duration: type === 'sfx' ? 1.0 : type === 'speech' ? 4.0 : 8.0,
+        fade_in_ms: type === 'music' ? 100 : 20,
+        fade_out_ms: type === 'music' ? 200 : 50,
+        volume: type === 'music' ? 0.5 : 1.0,
+        is_speech: type === 'speech',
+        is_ducked: type === 'music'
+      });
+      renderMemeTracksUI();
+    }
+
+    function removeMemeTrack(id) {
+      if (memeTracks.length <= 1) {
+        return alert('Timeline must maintain at least one audio track.');
+      }
+      memeTracks = memeTracks.filter(t => t.id !== id);
+      renderMemeTracksUI();
+    }
+
+    function updateMemeTrackProp(id, prop, value) {
+      const tr = memeTracks.find(t => t.id === id);
+      if (tr) {
+        tr[prop] = value;
+        renderTimelineVisualizer();
+      }
+    }
+
+    async function previewSingleTrack(id) {
+      const tr = memeTracks.find(t => t.id === id);
+      if (!tr) return;
+
+      try {
+        if (tr.type === 'speech' && tr.file_name) {
+          const fname = tr.file_name.trim();
+          loadAudioTrack(`/api/audio/file/${fname}`, `Preview: ${tr.name}`, tr.duration);
+        } else if (tr.type === 'sfx') {
+          const res = await fetch('/api/procedural/sfx', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ preset: tr.sfx_preset || 'cartoon_boing' })
+          });
+          const d = await res.json();
+          if (d.audio_url) loadAudioTrack(d.audio_url, `Preview SFX: ${tr.sfx_preset}`, d.duration_seconds);
+        } else if (tr.type === 'music') {
+          const res = await fetch('/api/procedural/music', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              genre: tr.music_genre || '8bit_retro',
+              bpm: tr.bpm || 120,
+              key: tr.key || 'C',
+              seed: tr.seed || '12345',
+              duration: tr.duration || 6.0
+            })
+          });
+          const d = await res.json();
+          if (d.audio_url) loadAudioTrack(d.audio_url, `Preview Music: ${tr.music_genre}`, d.duration_seconds);
+        }
+      } catch (err) {
+        alert('Track preview failed: ' + err.message);
+      }
+    }
+
+    function renderTimelineVisualizer() {
+      const container = document.getElementById('memeTimelineVisualizer');
+      if (!container) return;
+
+      let maxTime = 12.0;
+      memeTracks.forEach(t => {
+        const end = parseFloat(t.start_time || 0) + parseFloat(t.duration || 1.0);
+        if (end > maxTime) maxTime = end;
+      });
+      maxTime = Math.ceil(maxTime);
+
+      const colorMap = {
+        speech: 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+        music: 'linear-gradient(90deg, #8b5cf6, #a78bfa)',
+        sfx: 'linear-gradient(90deg, #f59e0b, #fbbf24)'
+      };
+
+      let html = '';
+      memeTracks.forEach(tr => {
+        const start = Math.max(0, parseFloat(tr.start_time || 0));
+        const dur = Math.max(0.2, parseFloat(tr.duration || 1.0));
+        const leftPct = (start / maxTime) * 100;
+        const widthPct = Math.min(100 - leftPct, (dur / maxTime) * 100);
+
+        html += `
+          <div style="display:flex; align-items:center; height:26px; position:relative; background:rgba(255,255,255,0.03); border-radius:4px;">
+            <div style="position:absolute; left:${leftPct}%; width:${widthPct}%; height:20px; background:${colorMap[tr.type] || '#64748b'}; border-radius:4px; padding:2px 8px; font-size:10px; font-weight:600; color:#fff; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; box-shadow:0 1px 3px rgba(0,0,0,0.3); display:flex; justify-content:space-between; align-items:center;">
+              <span>${tr.name}</span>
+              <span style="opacity:0.8; font-size:9px;">${start.toFixed(1)}s - ${(start + dur).toFixed(1)}s</span>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function renderMemeTracksUI() {
+      const container = document.getElementById('memeTracksContainer');
+      if (!container) return;
+
+      let html = '';
+      memeTracks.forEach((tr, idx) => {
+        const isSpeech = tr.type === 'speech';
+        const isMusic = tr.type === 'music';
+        const isSfx = tr.type === 'sfx';
+
+        const typeBadge = isSpeech ? '🎙️ Speech' : isMusic ? '🎵 Procedural Music' : '💥 Procedural SFX';
+
+        html += `
+          <div class="workspace-col" style="padding:14px; border-left:4px solid ${isSpeech ? 'var(--accent-blue)' : isMusic ? 'var(--accent-purple)' : 'var(--accent-amber)'};">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="text" class="voice-search-input" style="font-weight:600; font-size:13px; padding:4px 8px; width:220px;" value="${tr.name}" onchange="updateMemeTrackProp('${tr.id}', 'name', this.value)">
+                <span class="tag" style="font-size:10px;">${typeBadge}</span>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <button class="btn-transport" style="font-size:11px; padding:4px 10px;" onclick="previewSingleTrack('${tr.id}')" title="Preview this track">▶ Preview</button>
+                <button class="btn-transport" style="font-size:11px; padding:4px 8px; color:var(--accent-red);" onclick="removeMemeTrack('${tr.id}')" title="Remove track">🗑️</button>
+              </div>
+            </div>
+
+            <!-- SOURCE SELECTION ROW -->
+            <div style="display:flex; gap:10px; align-items:center; margin-bottom:12px;">
+              ${isSpeech ? `
+                <div style="flex:1; display:flex; gap:8px;">
+                  <select class="select-dropdown" style="flex:1;" onchange="updateMemeTrackProp('${tr.id}', 'file_name', this.value); this.nextElementSibling.value=this.value;">
+                    <option value="">-- Choose from Recent TTS Generations --</option>
+                    ${cachedTtsGenerations.map(g => `<option value="${g.file_name || g.id}" ${tr.file_name === (g.file_name || g.id) ? 'selected' : ''}>${(g.text_content || '').substring(0, 45)}... (${g.duration_seconds}s)</option>`).join('')}
+                  </select>
+                  <input type="text" class="voice-search-input" style="width:200px;" placeholder="Or audio filename" value="${tr.file_name || ''}" onchange="updateMemeTrackProp('${tr.id}', 'file_name', this.value)">
+                </div>
+              ` : ''}
+
+              ${isMusic ? `
+                <div style="flex:1; display:flex; gap:8px; align-items:center;">
+                  <select class="select-dropdown" style="flex:1;" onchange="updateMemeTrackProp('${tr.id}', 'music_genre', this.value)">
+                    <option value="8bit_retro" ${tr.music_genre === '8bit_retro' ? 'selected' : ''}>8-Bit Retro Chiptune</option>
+                    <option value="electronic" ${tr.music_genre === 'electronic' ? 'selected' : ''}>Electronic Synthwave</option>
+                    <option value="comedy" ${tr.music_genre === 'comedy' ? 'selected' : ''}>Comedy Oompah Bounce</option>
+                    <option value="suspense" ${tr.music_genre === 'suspense' ? 'selected' : ''}>Dark Suspense Tension</option>
+                    <option value="cinematic" ${tr.music_genre === 'cinematic' ? 'selected' : ''}>Cinematic Orchestral</option>
+                    <option value="happy" ${tr.music_genre === 'happy' ? 'selected' : ''}>Happy Upbeat Groove</option>
+                    <option value="dramatic" ${tr.music_genre === 'dramatic' ? 'selected' : ''}>Dramatic Crescendo</option>
+                    <option value="minimal" ${tr.music_genre === 'minimal' ? 'selected' : ''}>Minimal Background</option>
+                    <option value="ambient" ${tr.music_genre === 'ambient' ? 'selected' : ''}>Ambient Soundscape</option>
+                  </select>
+                  <span style="font-size:11px; color:var(--text-muted);">BPM:</span>
+                  <input type="number" class="voice-search-input" style="width:65px;" value="${tr.bpm || 120}" onchange="updateMemeTrackProp('${tr.id}', 'bpm', parseInt(this.value, 10))">
+                  <span style="font-size:11px; color:var(--text-muted);">Key:</span>
+                  <select class="select-dropdown" style="width:70px;" onchange="updateMemeTrackProp('${tr.id}', 'key', this.value)">
+                    ${['C', 'D', 'E', 'F', 'G', 'A', 'B'].map(k => `<option value="${k}" ${tr.key === k ? 'selected' : ''}>${k}</option>`).join('')}
+                  </select>
+                  <span style="font-size:11px; color:var(--text-muted);">Seed:</span>
+                  <input type="text" class="voice-search-input" style="width:75px;" value="${tr.seed || '12345'}" title="Deterministic PRNG Seed" onchange="updateMemeTrackProp('${tr.id}', 'seed', this.value)">
+                </div>
+              ` : ''}
+
+              ${isSfx ? `
+                <div style="flex:1;">
+                  <select class="select-dropdown" style="width:100%;" onchange="updateMemeTrackProp('${tr.id}', 'sfx_preset', this.value)">
+                    <option value="cartoon_boing" ${tr.sfx_preset === 'cartoon_boing' ? 'selected' : ''}>Cartoon Boing</option>
+                    <option value="funny_pop" ${tr.sfx_preset === 'funny_pop' ? 'selected' : ''}>Funny Pop</option>
+                    <option value="punch_impact" ${tr.sfx_preset === 'punch_impact' ? 'selected' : ''}>Punch Impact</option>
+                    <option value="record_scratch" ${tr.sfx_preset === 'record_scratch' ? 'selected' : ''}>Record Scratch</option>
+                    <option value="bass_drop" ${tr.sfx_preset === 'bass_drop' ? 'selected' : ''}>808 Bass Drop</option>
+                    <option value="dramatic_impact" ${tr.sfx_preset === 'dramatic_impact' ? 'selected' : ''}>Dramatic Impact</option>
+                    <option value="falling_sound" ${tr.sfx_preset === 'falling_sound' ? 'selected' : ''}>Falling Whistle</option>
+                    <option value="whoosh" ${tr.sfx_preset === 'whoosh' ? 'selected' : ''}>Stereo Whoosh</option>
+                    <option value="glitch" ${tr.sfx_preset === 'glitch' ? 'selected' : ''}>Digital Glitch</option>
+                    <option value="riser" ${tr.sfx_preset === 'riser' ? 'selected' : ''}>Buildup Riser</option>
+                    <option value="retro_coin" ${tr.sfx_preset === 'retro_coin' ? 'selected' : ''}>Retro 8-Bit Coin</option>
+                    <option value="retro_jump" ${tr.sfx_preset === 'retro_jump' ? 'selected' : ''}>Retro Jump</option>
+                    <option value="retro_laser" ${tr.sfx_preset === 'retro_laser' ? 'selected' : ''}>Retro Laser</option>
+                    <option value="comedic_transition" ${tr.sfx_preset === 'comedic_transition' ? 'selected' : ''}>Wah Wah Fail</option>
+                  </select>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- PRECISION TIMING, FADES & DUCKING CONTROLS -->
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; align-items:center; background:rgba(0,0,0,0.15); padding:10px; border-radius:6px;">
+              <div>
+                <label style="font-size:10px; color:var(--text-muted); display:block;">Start Time (s)</label>
+                <input type="number" class="voice-search-input" style="width:100%;" value="${tr.start_time || 0}" step="0.2" min="0" onchange="updateMemeTrackProp('${tr.id}', 'start_time', parseFloat(this.value))">
+              </div>
+
+              <div>
+                <label style="font-size:10px; color:var(--text-muted); display:block;">Trim Start (s)</label>
+                <input type="number" class="voice-search-input" style="width:100%;" value="${tr.trim_start || 0}" step="0.2" min="0" onchange="updateMemeTrackProp('${tr.id}', 'trim_start', parseFloat(this.value))">
+              </div>
+
+              <div>
+                <label style="font-size:10px; color:var(--text-muted); display:block;">Active Dur (s)</label>
+                <input type="number" class="voice-search-input" style="width:100%;" value="${tr.duration || 5.0}" step="0.5" min="0.5" onchange="updateMemeTrackProp('${tr.id}', 'duration', parseFloat(this.value))">
+              </div>
+
+              <div>
+                <label style="font-size:10px; color:var(--text-muted); display:block;">Fade In (ms)</label>
+                <input type="number" class="voice-search-input" style="width:100%;" value="${tr.fade_in_ms || 0}" step="50" min="0" onchange="updateMemeTrackProp('${tr.id}', 'fade_in_ms', parseFloat(this.value))">
+              </div>
+
+              <div>
+                <label style="font-size:10px; color:var(--text-muted); display:block;">Fade Out (ms)</label>
+                <input type="number" class="voice-search-input" style="width:100%;" value="${tr.fade_out_ms || 0}" step="50" min="0" onchange="updateMemeTrackProp('${tr.id}', 'fade_out_ms', parseFloat(this.value))">
+              </div>
+
+              <div>
+                <label style="font-size:10px; color:var(--text-muted); display:block;">Volume (${(tr.volume || 1.0).toFixed(2)})</label>
+                <input type="range" class="control-slider" min="0.0" max="2.0" step="0.05" value="${tr.volume || 1.0}" oninput="this.previousElementSibling.innerText='Volume ('+parseFloat(this.value).toFixed(2)+')'; updateMemeTrackProp('${tr.id}', 'volume', parseFloat(this.value))">
+              </div>
+
+              <div style="display:flex; flex-direction:column; justify-content:center;">
+                <label style="font-size:10px; color:var(--text-muted); display:block;">Ducking</label>
+                <label style="font-size:11px; display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="checkbox" ${tr.is_ducked ? 'checked' : ''} onchange="updateMemeTrackProp('${tr.id}', 'is_ducked', this.checked)">
+                  <span style="color:${tr.is_ducked ? 'var(--accent-purple)' : 'var(--text-muted)'}; font-weight:600;">Duck Under Speech</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+      renderTimelineVisualizer();
+    }
+
     async function renderMemeMixUI() {
       try {
-        const tracks = [];
-        const track1File = document.getElementById('memeTrack1File').value.trim();
-        if (track1File) {
-          tracks.push({
-            name: 'Speech',
-            file_name: track1File,
-            start_time: 0.0,
-            volume: parseFloat(document.getElementById('memeVol1').value)
-          });
-        }
-
-        // Track 2: Music
-        tracks.push({
-          name: 'Music',
-          music_genre: document.getElementById('memeMusicGenre').value,
-          duration: parseFloat(document.getElementById('memeMusicDur').value) || 8.0,
-          start_time: 0.0,
-          volume: parseFloat(document.getElementById('memeVol2').value)
-        });
-
-        // Track 3: SFX 1
-        tracks.push({
-          name: 'SFX 1',
-          sfx_preset: document.getElementById('memeSfx1Select').value,
-          start_time: parseFloat(document.getElementById('memeSfx1Time').value) || 1.0,
-          volume: parseFloat(document.getElementById('memeVol3').value)
-        });
-
-        // Track 4: SFX 2
-        tracks.push({
-          name: 'SFX 2',
-          sfx_preset: document.getElementById('memeSfx2Select').value,
-          start_time: parseFloat(document.getElementById('memeSfx2Time').value) || 3.0,
-          volume: parseFloat(document.getElementById('memeVol4').value)
-        });
+        const format = document.getElementById('memeExportFormat').value || 'wav';
+        const formattedTracks = memeTracks.map(t => ({
+          name: t.name,
+          type: t.type,
+          file_name: t.file_name ? t.file_name.trim() : undefined,
+          music_genre: t.type === 'music' ? (t.music_genre || 'comedy') : undefined,
+          bpm: t.type === 'music' ? (t.bpm || 120) : undefined,
+          key: t.type === 'music' ? (t.key || 'C') : undefined,
+          seed: t.type === 'music' ? t.seed : undefined,
+          sfx_preset: t.type === 'sfx' ? (t.sfx_preset || 'cartoon_boing') : undefined,
+          start_time: parseFloat(t.start_time || 0),
+          trim_start: parseFloat(t.trim_start || 0),
+          duration: parseFloat(t.duration || 5.0),
+          fade_in_ms: parseFloat(t.fade_in_ms || 0),
+          fade_out_ms: parseFloat(t.fade_out_ms || 0),
+          volume: parseFloat(t.volume !== undefined ? t.volume : 1.0),
+          is_speech: Boolean(t.is_speech),
+          is_ducked: Boolean(t.is_ducked)
+        }));
 
         const res = await fetch('/api/meme/mix', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tracks, format: 'wav' })
+          body: JSON.stringify({ tracks: formattedTracks, format })
         });
         const data = await res.json();
         if (data.audio_url) {
-          loadAudioTrack(data.audio_url, `Meme Master Mix (${data.track_count} tracks)`, data.duration_seconds);
+          const badge = document.getElementById('memeDuckingStatusBadge');
+          if (badge) {
+            badge.innerText = data.ducking_applied
+              ? `✅ Ducking Applied: Attenuated by ${data.max_attenuation_db} dB during speech`
+              : `Ducking: No active speech overlap detected`;
+            badge.style.color = data.ducking_applied ? 'var(--accent-blue)' : 'var(--text-muted)';
+          }
+          loadAudioTrack(data.audio_url, `Meme Mix (${data.track_count} tracks, ${data.format.toUpperCase()})`, data.duration_seconds);
+        } else {
+          alert('Mixdown returned error: ' + (data.detail || JSON.stringify(data)));
         }
       } catch (err) {
         alert('Meme mixing failed: ' + err.message);
       }
     }
 
+    // Initialize Meme Studio on tab activation
+    const origSwitchTab = switchTab;
+    switchTab = function(tabName) {
+      origSwitchTab(tabName);
+      if (tabName === 'meme') {
+        loadRecentGenerationsForMeme();
+        renderMemeTracksUI();
+      }
+    };
+
     // Bootstrap app
-    window.addEventListener('DOMContentLoaded', initApp);
+    window.addEventListener('DOMContentLoaded', () => {
+      initApp();
+      loadRecentGenerationsForMeme();
+      renderMemeTracksUI();
+    });
   </script>
 </body>
 </html>
