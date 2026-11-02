@@ -92,7 +92,7 @@ Commercial voice generation platforms lock high-fidelity speech behind recurring
 ### Launch the Workstation
 ```bash
 # 1. Clone repository
-git clone https://github.com/openvoice-studio/openvoice-studio.git
+git clone https://github.com/poojakpdoshi-cmd/openvoice-studio.git
 cd openvoice-studio
 
 # 2. Start the native high-performance server
@@ -118,3 +118,4 @@ Open your browser to:
 ## 5. License
 
 OpenVoice Studio is distributed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details. Individual voice models carry their own permissive open-source licenses (Apache 2.0, MIT, BSD-3, CC-BY, CC0) as detailed in `docs/VOICE_LIBRARY.md`.
+
