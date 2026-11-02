@@ -382,7 +382,7 @@
       background: var(--bg-secondary);
       border-top: 1px solid var(--border-color);
       display: grid;
-      grid-template-columns: 240px 1fr 280px;
+      grid-template-columns: 220px 1fr 380px;
       align-items: center;
       padding: 0 16px;
       gap: 16px;
@@ -1259,6 +1259,11 @@
     </div>
 
     <div class="player-export-actions">
+      <div class="player-volume-control" style="display:flex; align-items:center; gap:8px; margin-right:8px; background:var(--bg-tertiary); padding:4px 10px; border-radius:6px; border:1px solid var(--border-color);" title="Master Player Volume & Audio Boost (up to 200%)">
+        <button class="btn-transport" id="masterMuteBtn" onclick="toggleMasterMute()" title="Mute / Unmute" style="font-size:13px; padding:2px; color:var(--text-main);">🔊</button>
+        <input type="range" id="masterPlayerVolume" min="0" max="2.0" step="0.05" value="1.0" oninput="setMasterVolume(this.value)" style="width:75px; height:4px; accent-color:var(--accent-blue); cursor:pointer;">
+        <span id="masterVolumeDisplay" style="font-size:11px; font-family:var(--font-mono); color:var(--text-muted); min-width:34px; text-align:right;">100%</span>
+      </div>
       <button class="btn-export" onclick="downloadCurrentAudio('wav')">Download WAV</button>
       <button class="btn-export" onclick="downloadCurrentAudio('mp3')">Download MP3</button>
     </div>
@@ -1273,6 +1278,76 @@
     let audioDuration = 0;
     let isPlaying = false;
     let audioElement = new Audio();
+    audioElement.crossOrigin = 'anonymous';
+
+    // MASTER PLAYER VOLUME & AUDIO GAIN BOOST (Up to 200%)
+    let masterAudioCtx = null;
+    let masterGainNode = null;
+    let masterSourceNode = null;
+    let previousMasterVolume = 1.0;
+
+    function initMasterGainNode() {
+      if (masterGainNode) return;
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass && audioElement) {
+          masterAudioCtx = new AudioContextClass();
+          masterSourceNode = masterAudioCtx.createMediaElementSource(audioElement);
+          masterGainNode = masterAudioCtx.createGain();
+          masterSourceNode.connect(masterGainNode);
+          masterGainNode.connect(masterAudioCtx.destination);
+        }
+      } catch (e) {
+        console.warn('Web Audio GainNode fallback:', e.message);
+      }
+    }
+
+    function setMasterVolume(val) {
+      const num = parseFloat(val);
+      const disp = document.getElementById('masterVolumeDisplay');
+      const muteBtn = document.getElementById('masterMuteBtn');
+      const slider = document.getElementById('masterPlayerVolume');
+
+      if (slider && parseFloat(slider.value) !== num) slider.value = num;
+
+      if (disp) {
+        disp.innerText = num > 1.0 ? `${Math.round(num * 100)}% 🔥` : `${Math.round(num * 100)}%`;
+        disp.style.color = num > 1.0 ? 'var(--accent-blue)' : 'var(--text-muted)';
+      }
+
+      if (muteBtn) {
+        muteBtn.innerText = num === 0 ? '🔇' : (num < 0.5 ? '🔉' : '🔊');
+      }
+
+      if (num > 1.0) {
+        initMasterGainNode();
+        if (masterAudioCtx && masterAudioCtx.state === 'suspended') {
+          masterAudioCtx.resume();
+        }
+        if (masterGainNode) {
+          masterGainNode.gain.value = num;
+          audioElement.volume = 1.0;
+        } else {
+          audioElement.volume = 1.0;
+        }
+      } else {
+        if (masterGainNode) {
+          masterGainNode.gain.value = 1.0;
+        }
+        audioElement.volume = Math.max(0, Math.min(1.0, num));
+      }
+    }
+
+    function toggleMasterMute() {
+      const slider = document.getElementById('masterPlayerVolume');
+      const current = parseFloat(slider ? slider.value : audioElement.volume);
+      if (current > 0) {
+        previousMasterVolume = current;
+        setMasterVolume(0);
+      } else {
+        setMasterVolume(previousMasterVolume > 0 ? previousMasterVolume : 1.0);
+      }
+    }
     let currentDialogueProject = {
       id: "proj_demo",
       title: "AI Research Podcast",
@@ -1298,7 +1373,10 @@
         isPlaying = false;
         document.getElementById('playPauseBtn').innerText = '▶';
       } else {
-        audioElement.play();
+        if (masterAudioCtx && masterAudioCtx.state === 'suspended') {
+          masterAudioCtx.resume();
+        }
+        audioElement.play().catch(e => console.log('Playback error:', e));
         isPlaying = true;
         document.getElementById('playPauseBtn').innerText = '⏸';
       }
@@ -1359,7 +1437,10 @@
       document.getElementById('editorActiveFileName').innerText = `Active Track: ${title || currentFileName}`;
       document.getElementById('editorTrackDuration').innerText = `Duration: ${duration?.toFixed(1) || '0.0'}s`;
       document.getElementById('trimEndInput').value = duration?.toFixed(1) || '5.0';
-      audioElement.play();
+      if (masterAudioCtx && masterAudioCtx.state === 'suspended') {
+        masterAudioCtx.resume();
+      }
+      audioElement.play().catch(e => console.log('Autoplay deferred:', e));
       isPlaying = true;
       document.getElementById('playPauseBtn').innerText = '⏸';
       drawWaveform(0);

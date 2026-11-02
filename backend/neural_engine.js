@@ -187,7 +187,7 @@ function devanagariToIpa(text) {
 /**
  * 5. WAV File Encoding Helper
  */
-function floatTo16BitPcmWav(pcmData, sampleRate) {
+function floatTo16BitPcmWav(pcmData, sampleRate, volume = 1.0) {
   const numChannels = 1;
   const bytesPerSample = 2;
   const blockAlign = numChannels * bytesPerSample;
@@ -209,9 +209,22 @@ function floatTo16BitPcmWav(pcmData, sampleRate) {
   buffer.write('data', 36);
   buffer.writeUInt32LE(dataSize, 40);
 
+  // Peak detection
+  let peak = 0.0;
+  for (let i = 0; i < pcmData.length; i++) {
+    const abs = Math.abs(pcmData[i]);
+    if (abs > peak) peak = abs;
+  }
+
+  // Target true peak ceiling: -1.0 dBFS (0.89125) scaled by user volume gain
+  const safeVol = Math.max(0.1, Math.min(parseFloat(volume) || 1.0, 2.5));
+  // Brickwall limited at 0.950 (-0.45 dBFS) to prevent any digital distortion or clipping
+  const targetPeak = Math.min(0.950, 0.89125 * safeVol);
+  const gain = peak > 0.0001 ? (targetPeak / peak) : 1.0;
+
   let offset = 44;
   for (let i = 0; i < pcmData.length; i++) {
-    const s = Math.max(-1, Math.min(1, pcmData[i]));
+    const s = Math.max(-0.999, Math.min(0.999, pcmData[i] * gain));
     const val = s < 0 ? s * 0x8000 : s * 0x7FFF;
     buffer.writeInt16LE(Math.round(val), offset);
     offset += 2;
@@ -224,37 +237,38 @@ function floatTo16BitPcmWav(pcmData, sampleRate) {
  */
 async function synthesizeSpeech(text, voiceId, outputPath, options = {}) {
   const speed = Math.max(0.5, Math.min(parseFloat(options.speed) || 1.0, 2.0));
+  const volume = Math.max(0.1, Math.min(parseFloat(options.volume) || 1.0, 2.5));
   const cleanText = text.trim();
   if (!cleanText) throw new Error('Empty text received for speech synthesis.');
 
   // A. Custom Cloned Voice
   if (voiceId.startsWith('custom_')) {
-    return await synthesizeClonedVoice(cleanText, voiceId, outputPath, speed, options);
+    return await synthesizeClonedVoice(cleanText, voiceId, outputPath, speed, { ...options, volume });
   }
 
   // B. Meta MMS Gujarati Voice
   if (voiceId === 'mms-gu-vits' || voiceId.includes('gujarati') || voiceId.includes('gu-')) {
-    return await synthesizeGujaratiMms(cleanText, outputPath, speed);
+    return await synthesizeGujaratiMms(cleanText, outputPath, speed, volume);
   }
 
   // C. Piper Hindi Voice
   if (voiceId === 'piper-hi-pratham' || voiceId === 'hi_IN-pratham-medium' || voiceId.includes('hi-')) {
-    return await synthesizePiperHindi(cleanText, outputPath, speed);
+    return await synthesizePiperHindi(cleanText, outputPath, speed, volume);
   }
 
   // D. Piper English Voice (e.g. en_US-lessac-medium)
   if (voiceId === 'piper-en-lessac' || voiceId === 'en_US-lessac-medium' || voiceId.startsWith('piper-')) {
-    return await synthesizePiperEnglish(cleanText, outputPath, speed, voiceId);
+    return await synthesizePiperEnglish(cleanText, outputPath, speed, voiceId, volume);
   }
 
   // E. Kokoro-82M Voices (af_*, am_*, bf_*, bm_*)
-  return await synthesizeKokoro(cleanText, voiceId, outputPath, speed);
+  return await synthesizeKokoro(cleanText, voiceId, outputPath, speed, volume);
 }
 
 /**
  * Synthesize with Kokoro-82M
  */
-async function synthesizeKokoro(text, voiceId, outputPath, speed = 1.0) {
+async function synthesizeKokoro(text, voiceId, outputPath, speed = 1.0, volume = 1.0) {
   const tts = await getKokoro();
   
   // Normalize voice ID
@@ -266,14 +280,14 @@ async function synthesizeKokoro(text, voiceId, outputPath, speed = 1.0) {
     validVoice = match || 'af_heart';
   }
 
-  console.log(`[NeuralEngine] Kokoro synthesizing (${validVoice}, speed=${speed}): "${text.slice(0, 40)}..."`);
+  console.log(`[NeuralEngine] Kokoro synthesizing (${validVoice}, speed=${speed}, volume=${volume}): "${text.slice(0, 40)}..."`);
   const rawAudio = await tts.generate(text, {
     voice: validVoice,
     speed: speed
   });
 
   // rawAudio contains audio (Float32Array) and sampling_rate (24000)
-  const wavBuffer = floatTo16BitPcmWav(rawAudio.audio, rawAudio.sampling_rate || 24000);
+  const wavBuffer = floatTo16BitPcmWav(rawAudio.audio, rawAudio.sampling_rate || 24000, volume);
   fs.writeFileSync(outputPath, wavBuffer);
   return outputPath;
 }
@@ -281,7 +295,7 @@ async function synthesizeKokoro(text, voiceId, outputPath, speed = 1.0) {
 /**
  * Synthesize with Piper English (en_US-lessac-medium)
  */
-async function synthesizePiperEnglish(text, outputPath, speed = 1.0, voiceId = 'en_US-lessac-medium') {
+async function synthesizePiperEnglish(text, outputPath, speed = 1.0, voiceId = 'en_US-lessac-medium', volume = 1.0) {
   const modelName = voiceId.includes('lessac') ? 'en_US-lessac-medium' : 'en_US-lessac-medium';
   const { session, config } = await getPiperSession(modelName);
 
@@ -309,7 +323,7 @@ async function synthesizePiperEnglish(text, outputPath, speed = 1.0, voiceId = '
 
   const pcmData = results.output.data;
   const sampleRate = config.audio.sample_rate || 22050;
-  const wavBuffer = floatTo16BitPcmWav(pcmData, sampleRate);
+  const wavBuffer = floatTo16BitPcmWav(pcmData, sampleRate, volume);
   fs.writeFileSync(outputPath, wavBuffer);
   return outputPath;
 }
@@ -317,7 +331,7 @@ async function synthesizePiperEnglish(text, outputPath, speed = 1.0, voiceId = '
 /**
  * Synthesize with Piper Hindi (hi_IN-pratham-medium)
  */
-async function synthesizePiperHindi(text, outputPath, speed = 1.0) {
+async function synthesizePiperHindi(text, outputPath, speed = 1.0, volume = 1.0) {
   const { session, config } = await getPiperSession('hi_IN-pratham-medium');
   const ipa = devanagariToIpa(text);
   console.log(`[NeuralEngine] Piper Hindi: "${text}" -> IPA: "${ipa}"`);
@@ -346,7 +360,7 @@ async function synthesizePiperHindi(text, outputPath, speed = 1.0) {
 
   const pcmData = results.output.data;
   const sampleRate = config.audio.sample_rate || 22050;
-  const wavBuffer = floatTo16BitPcmWav(pcmData, sampleRate);
+  const wavBuffer = floatTo16BitPcmWav(pcmData, sampleRate, volume);
   fs.writeFileSync(outputPath, wavBuffer);
   return outputPath;
 }
@@ -354,7 +368,7 @@ async function synthesizePiperHindi(text, outputPath, speed = 1.0) {
 /**
  * Synthesize with Meta MMS Gujarati VITS
  */
-async function synthesizeGujaratiMms(text, outputPath, speed = 1.0) {
+async function synthesizeGujaratiMms(text, outputPath, speed = 1.0, volume = 1.0) {
   const { session, vocab } = await getMmsGujarati();
   console.log(`[NeuralEngine] MMS Gujarati synthesizing: "${text}"`);
 
@@ -380,7 +394,7 @@ async function synthesizeGujaratiMms(text, outputPath, speed = 1.0) {
 
   const waveform = results.waveform.data;
   const sampleRate = 16000;
-  const wavBuffer = floatTo16BitPcmWav(waveform, sampleRate);
+  const wavBuffer = floatTo16BitPcmWav(waveform, sampleRate, volume);
   fs.writeFileSync(outputPath, wavBuffer);
   return outputPath;
 }
@@ -396,12 +410,13 @@ async function synthesizeClonedVoice(text, voiceId, outputPath, speed = 1.0, opt
 
   const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
   const baseVoice = profile.base_timbre_voice || (profile.gender === 'Male' ? 'am_adam' : 'af_bella');
+  const volume = Math.max(0.1, Math.min(parseFloat(options.volume) || 1.0, 2.5));
 
   console.log(`[NeuralEngine] Cloned synthesis: using custom profile "${profile.name}" (base: ${baseVoice})`);
 
   // Synthesize neural speech using base timbre
   const tempWav = outputPath + '.tmp.wav';
-  await synthesizeKokoro(text, baseVoice, tempWav, speed);
+  await synthesizeKokoro(text, baseVoice, tempWav, speed, volume);
 
   // Apply acoustic fine-tuning based on reference audio forensics
   const pitchBias = profile.acoustic_features?.pitch_semitone_bias || 0.0;

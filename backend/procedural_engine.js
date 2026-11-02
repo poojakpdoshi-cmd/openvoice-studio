@@ -1700,6 +1700,9 @@ async function renderMultitrackMix({
       }
     } else if (tr.sfx_preset && SoundEffectGenerators[tr.sfx_preset]) {
       rawBuffer = SoundEffectGenerators[tr.sfx_preset]();
+      if (rawBuffer && rawBuffer.length > 0) {
+        rawBuffer = normalizeAndLimit(rawBuffer, -1.0);
+      }
     } else if (tr.music_genre) {
       rawBuffer = generateProceduralMusic({
         genre: tr.music_genre,
