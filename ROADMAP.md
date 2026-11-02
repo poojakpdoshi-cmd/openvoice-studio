@@ -26,3 +26,4 @@
 - [ ] Automated emotion transfer via reference prosody embeddings.
 - [ ] VST / AU plugin exporter to use OpenVoice Studio directly inside DAWs (Ableton, Logic, Reaper).
 - [ ] Expanded Indic language packs (Tamil, Telugu, Bengali, Marathi).
+

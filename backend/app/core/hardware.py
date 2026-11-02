@@ -57,3 +57,4 @@ def detect_hardware():
         info["recommended_engine"] = "piper"
 
     return info
+

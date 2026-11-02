@@ -5,29 +5,29 @@
 | Specification | Minimum (Low Resource) | Recommended (Pro Studio) |
 | :--- | :--- | :--- |
 | **Operating System** | Windows 10/11, macOS 12+, Ubuntu 20.04+ | Windows 11, macOS 14 (M-Series), Ubuntu 22.04+ |
-| **CPU** | 4-Core x86_64 or ARM64 | 8+ Core modern CPU (Intel i7/i9, Ryzen 7/9, Apple M3/M4) |
-| **RAM** | 4 GB | 16 GB+ |
-| **GPU / VRAM** | None required (CPU DSP mode active) | NVIDIA GPU with 6+ GB VRAM (RTX 3060/4060 or higher) |
-| **Disk Space** | 500 MB (core engine + 115 voices) | 5 GB (for onnx models and audio exports) |
+| **CPU** | 4-Core x86_64 or ARM64 | 8+ Core modern CPU (AMD Ryzen 7/9, Intel i7/i9, Apple M-Series) |
+| **RAM** | 8 GB | 16 GB+ |
+| **GPU / VRAM** | CPU AVX2 multi-threaded SIMD supported | NVIDIA GPU (DirectML / CUDA) or Apple Silicon GPU |
+| **Disk Space** | 2 GB (neural models + audio cache) | 10 GB (for multi-language voice packs and projects) |
 
 ---
 
-## 1. Quick Launch (Node.js Engine)
+## 1. Quick Launch (Node.js Neural Engine)
 
-OpenVoice Studio includes a high-performance native server leveraging Node.js v20+ with built-in SQLite, audio streaming, and FFmpeg DSP.
+OpenVoice Studio includes a high-performance native server leveraging Node.js v20+ (v24 recommended) with native ONNX Runtime, Kokoro-82M, Piper VITS, and Meta MMS.
 
 ```bash
-# 1. Ensure FFmpeg is installed
-# On Windows (winget):
-winget install Gyan.FFmpeg
+# 1. Clone repository
+git clone https://github.com/poojakpdoshi-cmd/openvoice-studio.git
+cd openvoice-studio
 
-# On macOS (Homebrew):
-brew install ffmpeg
+# 2. Install dependencies (ONNX Runtime and Kokoro TTS)
+npm install
 
-# On Linux (Debian/Ubuntu):
-sudo apt update && sudo apt install -y ffmpeg
+# 3. Ensure FFmpeg is installed and accessible in PATH
+ffmpeg -version
 
-# 2. Start OpenVoice Studio
+# 4. Start OpenVoice Studio
 node backend/server.js
 ```
 
@@ -35,18 +35,45 @@ Open your browser to: **`http://localhost:8000`**
 
 ---
 
-## 2. Python FastAPI Backend Setup (Optional Alternative)
+## 2. Running Automated Neural Tests
+
+OpenVoice Studio includes a complete neural acceptance test suite that validates hardware detection, model loading, Kokoro inference, Piper English/Hindi inference, Meta MMS Gujarati inference, zero-shot voice cloning, and audio workspace exports:
+
+```bash
+node backend/test_suite.js
+```
+
+Expected output:
+```
+================================================================
+       OPENVOICE STUDIO — NEURAL ACCEPTANCE TEST SUITE          
+================================================================
+
+[PASS] Hardware Telemetry Check
+[PASS] Voice Catalog Audit
+[PASS] Kokoro-82M Neural Synthesis (English)
+[PASS] Piper VITS Neural Synthesis (English)
+[PASS] Piper VITS Neural Synthesis (Hindi)
+[PASS] Meta MMS Neural Synthesis (Gujarati)
+[PASS] Zero-Shot Custom Voice Cloning
+[PASS] Audio Workspace Exports (WAV, MP3, FLAC)
+[PASS] Multi-Speaker Dialogue Synthesis
+
+================================================================
+TOTAL TESTS: 9 | PASSED: 9 | FAILED: 0
+================================================================
+```
+
+---
+
+## 3. Python FastAPI Backend Setup (Optional Alternative)
 
 If you prefer to run the Python backend with PyTorch:
 
 ```bash
 # 1. Create and activate a virtual environment
 python -m venv venv
-
-# Windows:
-.\venv\Scripts\activate
-# Linux / macOS:
-source venv/bin/activate
+source venv/bin/activate  # or .\venv\Scripts\activate on Windows
 
 # 2. Install dependencies
 pip install -r backend/requirements.txt
@@ -57,33 +84,8 @@ uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 
 ---
 
-## 3. Running Automated Tests
+## 4. Hardware Acceleration
 
-To run the internal verification test suite:
-
-```bash
-node backend/tests/direct_test.js
-```
-
-Expected output:
-```
---- 1. Testing Voice Catalog Seeding ---
-✓ Voice catalog loaded: 115 voices.
---- 2. Testing SQLite Database & 110+ Voice Insertion ---
-✓ Database voice count: 115
---- 3. Testing Real Speech Synthesis & DSP Pitch Shift ---
-✓ Generated master audio file size: 205996 bytes
---- 4. Testing Audio Forensics & Quality Auditing ---
-✓ Audited duration: 4.29s
---- 5. Testing Multi-Format Export (WAV -> MP3) ---
-✓ Exported MP3 size: 87432 bytes
---- 6. Testing Custom Voice Cloning Profile Generation ---
-✓ Custom voice profile written with biometric consent affirmation.
---- 7. Testing Cloned Voice Synthesis ---
-✓ Cloned voice synthesis verified: 76182 bytes
---- 8. Testing Inter-Speaker Pause & Multi-Voice Concatenation ---
-✓ Multi-speaker continuous dialogue rendered: 282100 bytes
-========================================================
-  🎉 100% OF OPENVOICE STUDIO SUBSYSTEMS VERIFIED OK!
-========================================================
-```
+* **CPU**: Automatically utilizes multi-threaded AVX2/AVX-512 SIMD vector instructions via `onnxruntime-node`.
+* **Integrated GPUs (AMD Radeon, Intel Iris Xe)**: Detected in telemetry; DirectML acceleration supported.
+* **NVIDIA CUDA**: Fully supported via ONNX Runtime CUDA provider when NVIDIA GPU and drivers are present.

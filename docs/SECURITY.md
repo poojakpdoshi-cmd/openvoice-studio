@@ -22,3 +22,4 @@ Synthetic voice generation poses a risk to legacy voice-recognition security sys
 * The OpenVoice Studio backend binds strictly to `127.0.0.1` (localhost) by default, preventing unauthorized exposure across local area networks (LANs).
 * Cross-Origin Resource Sharing (CORS) is restricted to the local frontend origin.
 * File access is strictly constrained to the application workspace directory (`storage/`) with path traversal guards.
+

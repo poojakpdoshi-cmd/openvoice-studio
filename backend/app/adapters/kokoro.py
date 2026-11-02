@@ -67,3 +67,4 @@ class KokoroAdapter(BaseTTSAdapter):
             volume=volume,
             language=language
         )
+

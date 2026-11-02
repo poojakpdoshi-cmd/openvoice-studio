@@ -226,3 +226,4 @@ CREATE TABLE IF NOT EXISTS pronunciations (
    * **MP3:** Fraunhofer/LAME variable bit-rate (V0) or constant bit-rate (128 kbps to 320 kbps).
    * **FLAC:** Free Lossless Audio Codec (compression level 5, 24-bit support).
    * Built-in ID3/RIFF metadata tagger: adds `Artist: OpenVoice Studio`, `Title`, and an invisible safety disclosure tag: `AI_VOICE_STUDIO_GENERATED: true`.
+

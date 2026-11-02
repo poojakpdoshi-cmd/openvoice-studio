@@ -69,3 +69,4 @@ class PiperAdapter(BaseTTSAdapter):
             flite = FliteDSPAdapter()
             base_voice = "slt" if "female" in voice_id or "amy" in voice_id or "eva" in voice_id else "kal16"
             return flite.synthesize_chunk(text, base_voice, output_path, speed=speed, pitch=pitch, volume=volume, language=language)
+

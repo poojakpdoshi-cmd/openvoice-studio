@@ -46,3 +46,4 @@ When a user deletes a custom voice profile:
 2. The reference audio recording file (`.wav`) is deleted from disk.
 3. All derived acoustic features, embeddings, and latent representations are completely unlinked and wiped from storage.
 4. Any cached generation files associated with that custom voice are offered for purge.
+

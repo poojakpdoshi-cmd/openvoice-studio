@@ -25,3 +25,4 @@ def test_pronunciation_dictionary():
 
 def test_audio_dsp_availability():
     assert AudioDSPService.is_available() is True
+

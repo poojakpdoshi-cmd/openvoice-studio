@@ -26,3 +26,4 @@ CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localh
 DEFAULT_SAMPLE_RATE = 24000
 MAX_TEXT_LENGTH = 50000
 MAX_CHUNK_CHARS = 350
+

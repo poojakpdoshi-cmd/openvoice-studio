@@ -155,3 +155,4 @@ class ProjectManager:
         finally:
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
+

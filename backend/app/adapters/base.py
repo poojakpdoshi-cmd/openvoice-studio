@@ -50,3 +50,4 @@ class BaseTTSAdapter(ABC):
     ) -> str:
         """Synthesize a single text chunk to a WAV audio file."""
         pass
+

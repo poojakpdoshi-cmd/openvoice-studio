@@ -4,6 +4,9 @@ __pycache__/
 storage/audio/*
 !storage/audio/.gitkeep
 storage/models/*
+storage/custom_voices/*
+!storage/custom_voices/.gitkeep
+storage/openvoice.db
 storage/temp*
 .DS_Store
 Thumbs.db

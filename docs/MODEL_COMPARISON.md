@@ -122,3 +122,4 @@ To deliver on our commitment of **100% free, local, professional-quality generat
 | **Pro Studio** | Modern GPU (RTX 3060, 4060, Apple M-Series) | 16 GB | 6 GB - 8 GB | 0.03 - 0.10 (10x-30x RT) | Kokoro + Voice Cloning Pipeline |
 
 OpenVoice Studio dynamically inspects available hardware upon launch and recommends optimal engine settings automatically.
+

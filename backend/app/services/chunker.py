@@ -139,3 +139,4 @@ def _analyze_chunk(text: str, index: int) -> Dict[str, Any]:
         "pause_after_ms": pause_ms,
         "estimated_duration_seconds": max(est_duration, 0.5)
     }
+
