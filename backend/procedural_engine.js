@@ -48,18 +48,20 @@ const Oscillators = {
     return 2.0 * Math.abs(2.0 * p - 1.0) - 1.0;
   },
   pulse: (phase, width = 0.25) => ((phase % (2 * Math.PI)) / (2 * Math.PI) < width ? 1.0 : -1.0),
-  noise: () => Math.random() * 2.0 - 1.0
+  noise: (rng = null) => ((rng ? rng() : Math.random()) * 2.0 - 1.0)
 };
 
 /**
  * Pink Noise Generator (3-pole filter / Voss-McCartney algorithm)
+ * Supports deterministic PRNG injection.
  */
 class PinkNoise {
-  constructor() {
+  constructor(rng = null) {
+    this.rng = rng;
     this.b0 = 0; this.b1 = 0; this.b2 = 0;
   }
   next() {
-    const white = Math.random() * 2.0 - 1.0;
+    const white = (this.rng ? this.rng() : Math.random()) * 2.0 - 1.0;
     this.b0 = 0.99886 * this.b0 + white * 0.0555179;
     this.b1 = 0.99332 * this.b1 + white * 0.0750759;
     this.b2 = 0.96900 * this.b2 + white * 0.1538520;
@@ -332,13 +334,14 @@ const SynthInstruments = {
   /**
    * Karplus-Strong Plucked String (Acoustic guitar / harp / pizzicato strings)
    */
-  pluckedString: (freq, duration, sampleRate = SAMPLE_RATE, { damping = 0.985 } = {}) => {
+  pluckedString: (freq, duration, sampleRate = SAMPLE_RATE, { damping = 0.985, rng = null } = {}) => {
     const numSamples = Math.floor(duration * sampleRate);
     const buf = new Float32Array(numSamples);
     const delayLength = Math.max(2, Math.round(sampleRate / Math.max(20, freq)));
     const delayBuffer = new Float32Array(delayLength);
     for (let i = 0; i < delayLength; i++) {
-      delayBuffer[i] = Math.random() * 2.0 - 1.0;
+      const rand = (rng ? rng() : Math.random());
+      delayBuffer[i] = rand * 2.0 - 1.0;
     }
     let ptr = 0;
     let prev = 0;
@@ -455,7 +458,8 @@ const SoundEffectGenerators = {
   /**
    * 3. Punch Impact
    */
-  punch_impact: ({ duration = 0.45 } = {}) => {
+  punch_impact: ({ duration = 0.45, rng = null, seed = null } = {}) => {
+    const actualRng = rng || (seed !== null && seed !== undefined ? createRng(seed) : null);
     const numSamples = Math.floor(duration * SAMPLE_RATE);
     const buf = new Float32Array(numSamples);
     let phase = 0;
@@ -467,7 +471,8 @@ const SoundEffectGenerators = {
       phase += (2 * Math.PI * freq) / SAMPLE_RATE;
       const sub = Oscillators.sine(phase);
       // Noise snap
-      const noise = (Math.random() * 2.0 - 1.0) * Math.exp(-t * 28.0) * 1.4;
+      const rand = actualRng ? actualRng() : Math.random();
+      const noise = (rand * 2.0 - 1.0) * Math.exp(-t * 28.0) * 1.4;
       buf[i] = sub * Math.exp(-t * 6.0) + filter.process(noise);
     }
     return applyDistortion(buf, 2.2, 'soft');
@@ -495,7 +500,8 @@ const SoundEffectGenerators = {
   /**
    * 5. Record Scratch
    */
-  record_scratch: ({ duration = 0.5 } = {}) => {
+  record_scratch: ({ duration = 0.5, rng = null, seed = null } = {}) => {
+    const actualRng = rng || (seed !== null && seed !== undefined ? createRng(seed) : null);
     const numSamples = Math.floor(duration * SAMPLE_RATE);
     const buf = new Float32Array(numSamples);
     let phase = 0;
@@ -505,7 +511,8 @@ const SoundEffectGenerators = {
       // Scrub curve back-and-forth
       const scrubSpeed = Math.sin(t * Math.PI * 4) * 600 + 750;
       phase += (2 * Math.PI * scrubSpeed) / SAMPLE_RATE;
-      const noise = (Math.random() * 2.0 - 1.0);
+      const rand = actualRng ? actualRng() : Math.random();
+      const noise = (rand * 2.0 - 1.0);
       const tone = Oscillators.sawtooth(phase) * 0.4;
       buf[i] = bp.process(noise * 0.6 + tone) * Math.sin(t * Math.PI);
     }
@@ -573,7 +580,8 @@ const SoundEffectGenerators = {
   /**
    * 9. Glitch
    */
-  glitch: ({ duration = 0.7 } = {}) => {
+  glitch: ({ duration = 0.7, rng = null, seed = null } = {}) => {
+    const actualRng = rng || (seed !== null && seed !== undefined ? createRng(seed) : null);
     const numSamples = Math.floor(duration * SAMPLE_RATE);
     const buf = new Float32Array(numSamples);
     let phase = 0;
@@ -581,7 +589,8 @@ const SoundEffectGenerators = {
     for (let i = 0; i < numSamples; i++) {
       // Step frequency randomly every 800 samples
       if (i % 800 === 0) {
-        stepFreq = 150 + Math.floor(Math.random() * 2000);
+        const rand = actualRng ? actualRng() : Math.random();
+        stepFreq = 150 + Math.floor(rand * 2000);
       }
       phase += (2 * Math.PI * stepFreq) / SAMPLE_RATE;
       const stutter = (i % 400 < 300) ? 1.0 : 0.0;
@@ -824,7 +833,7 @@ const SynthDrums = {
     return applyDistortion(buf, 1.5, 'soft');
   },
 
-  snare: (sampleRate = SAMPLE_RATE) => {
+  snare: (sampleRate = SAMPLE_RATE, { rng = null } = {}) => {
     const numSamples = Math.floor(0.22 * sampleRate);
     const buf = new Float32Array(numSamples);
     const filter = new BiquadFilter('bandpass', 1800, 1.8, sampleRate);
@@ -833,35 +842,38 @@ const SynthDrums = {
       const t = i / sampleRate;
       phase += (2 * Math.PI * 185) / sampleRate;
       const tone = Oscillators.sine(phase) * Math.exp(-t * 22.0);
-      const noise = (Math.random() * 2.0 - 1.0) * Math.exp(-t * 14.0);
+      const rand = (rng ? rng() : Math.random());
+      const noise = (rand * 2.0 - 1.0) * Math.exp(-t * 14.0);
       buf[i] = tone * 0.4 + filter.process(noise) * 0.8;
     }
     return buf;
   },
 
-  hihat_closed: (sampleRate = SAMPLE_RATE) => {
+  hihat_closed: (sampleRate = SAMPLE_RATE, { rng = null } = {}) => {
     const numSamples = Math.floor(0.05 * sampleRate);
     const buf = new Float32Array(numSamples);
     const filter = new BiquadFilter('highpass', 7000, 1.5, sampleRate);
     for (let i = 0; i < numSamples; i++) {
       const t = i / numSamples;
-      buf[i] = filter.process(Math.random() * 2.0 - 1.0) * (1.0 - t);
+      const rand = (rng ? rng() : Math.random());
+      buf[i] = filter.process(rand * 2.0 - 1.0) * (1.0 - t);
     }
     return buf;
   },
 
-  hihat_open: (sampleRate = SAMPLE_RATE) => {
+  hihat_open: (sampleRate = SAMPLE_RATE, { rng = null } = {}) => {
     const numSamples = Math.floor(0.25 * sampleRate);
     const buf = new Float32Array(numSamples);
     const filter = new BiquadFilter('highpass', 6500, 1.5, sampleRate);
     for (let i = 0; i < numSamples; i++) {
       const t = i / sampleRate;
-      buf[i] = filter.process(Math.random() * 2.0 - 1.0) * Math.exp(-t * 12.0);
+      const rand = (rng ? rng() : Math.random());
+      buf[i] = filter.process(rand * 2.0 - 1.0) * Math.exp(-t * 12.0);
     }
     return buf;
   },
 
-  crash: (sampleRate = SAMPLE_RATE) => {
+  crash: (sampleRate = SAMPLE_RATE, { rng = null } = {}) => {
     const numSamples = Math.floor(1.4 * sampleRate);
     const buf = new Float32Array(numSamples);
     const filter = new BiquadFilter('highpass', 5000, 1.2, sampleRate);
@@ -873,13 +885,14 @@ const SynthDrums = {
       p3 += (2 * Math.PI * 789) / sampleRate;
       p4 += (2 * Math.PI * 1042) / sampleRate;
       const metallic = (Oscillators.square(p1, 0.4) + Oscillators.square(p2, 0.3) + Oscillators.square(p3, 0.2) + Oscillators.square(p4, 0.5)) * 0.25;
-      const noise = (Math.random() * 2.0 - 1.0) * 0.75;
+      const rand = (rng ? rng() : Math.random());
+      const noise = (rand * 2.0 - 1.0) * 0.75;
       buf[i] = filter.process(metallic + noise) * Math.exp(-t * 2.8);
     }
     return buf;
   },
 
-  tom: (sampleRate = SAMPLE_RATE, startFreq = 160, endFreq = 65) => {
+  tom: (sampleRate = SAMPLE_RATE, startFreq = 160, endFreq = 65, { rng = null } = {}) => {
     const numSamples = Math.floor(0.22 * sampleRate);
     const buf = new Float32Array(numSamples);
     let phase = 0;
@@ -946,7 +959,13 @@ function generateProceduralMusic({
   if (genre === '8bit_retro') {
     const root = getMidiRoot(key, 4);
     const chords = customChords || [root, root + 7, root + 9, root + 5];
-    const motif = [0, 4, 7, 12, 11, 7, 4, 2];
+    const motifPool = [
+      [0, 4, 7, 12, 11, 7, 4, 2],
+      [0, 3, 7, 12, 10, 7, 3, 2],
+      [0, 7, 4, 12, 7, 4, 2, 0],
+      [0, 5, 7, 12, 11, 9, 7, 4]
+    ];
+    const motif = motifPool[Math.floor(rng() * motifPool.length)];
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
@@ -961,19 +980,19 @@ function generateProceduralMusic({
         mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.7);
       }
       if (beatInBar === 1 || beatInBar === 3) {
-        mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart, 0.6);
+        mixClip(masterBuffer, SynthDrums.snare(sampleRate, { rng }), beatStart, 0.6);
       }
-      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart, 0.4);
-      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.3);
+      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate, { rng }), beatStart, 0.4);
+      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.3);
 
       // Transition Fill (Toms on beat 4 of transition bar)
       if (isTransition && beatInBar === 3) {
-        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 190, 80), beatStart, 0.6);
-        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 140, 55), beatStart + Math.floor(samplesPerBeat / 2), 0.6);
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 190, 80, { rng }), beatStart, 0.6);
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 140, 55, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.6);
       }
       // Section Start Crash Cymbal
       if (isSectionStart && beatInBar === 0) {
-        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate), 0.4, 0.6), beatStart, 0.6);
+        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate, { rng }), 0.4, 0.6), beatStart, 0.6);
       }
 
       // Fast 16th-note Chiptune Arpeggios (Pulse wave 25% duty)
@@ -1009,6 +1028,13 @@ function generateProceduralMusic({
   else if (genre === 'electronic') {
     const root = getMidiRoot(key, 3);
     const chords = customChords || [root, root - 4, root - 2, root - 5];
+    const leadPool = [
+      [0, 3, 7, 10, 12, 10, 7, 3],
+      [0, 7, 10, 12, 14, 12, 10, 7],
+      [0, 3, 7, 12, 15, 12, 7, 3],
+      [0, 2, 7, 10, 12, 7, 10, 2]
+    ];
+    const motifIntervals = leadPool[Math.floor(rng() * leadPool.length)];
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
@@ -1020,18 +1046,18 @@ function generateProceduralMusic({
       // 4-on-the-floor kick
       mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.85);
       // Snare on 2 and 4
-      if (b % 2 === 1) mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart, 0.7);
+      if (b % 2 === 1) mixClip(masterBuffer, SynthDrums.snare(sampleRate, { rng }), beatStart, 0.7);
       // Offbeat open hi-hat
-      mixClip(masterBuffer, SynthDrums.hihat_open(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.45);
+      mixClip(masterBuffer, SynthDrums.hihat_open(sampleRate, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.45);
 
       // Transition fill
       if (isTransition && (b % 4 === 3)) {
-        mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart + Math.floor(samplesPerBeat / 4), 0.5);
-        mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.65);
-        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 180, 60), beatStart + Math.floor(samplesPerBeat * 0.75), 0.7);
+        mixClip(masterBuffer, SynthDrums.snare(sampleRate, { rng }), beatStart + Math.floor(samplesPerBeat / 4), 0.5);
+        mixClip(masterBuffer, SynthDrums.snare(sampleRate, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.65);
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 180, 60, { rng }), beatStart + Math.floor(samplesPerBeat * 0.75), 0.7);
       }
       if (isSectionStart && (b % 4 === 0)) {
-        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate), 0.45, 0.6), beatStart, 0.75);
+        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate, { rng }), 0.45, 0.6), beatStart, 0.75);
       }
 
       // Driving 16th Sawtooth Bassline
@@ -1046,7 +1072,6 @@ function generateProceduralMusic({
       mixClip(masterBuffer, bassBuf, beatStart + Math.floor(samplesPerBeat / 2), 0.55);
 
       // Rich Supersaw Lead Pluck with Motif Variation
-      const motifIntervals = [0, 3, 7, 10, 12, 10, 7, 3];
       const noteMidi = chordRoot + 12 + motifIntervals[(b * 2) % motifIntervals.length];
       const leadNote = SynthInstruments.supersawLead(noteToFreq(noteMidi), beatDuration * 0.9, sampleRate, {
         detuneCents: 16,
@@ -1061,6 +1086,7 @@ function generateProceduralMusic({
   else if (genre === 'comedy') {
     const root = getMidiRoot(key, 3);
     const chords = customChords || [root, root + 5, root + 7, root];
+    const inversion = Math.floor(rng() * 2);
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
@@ -1079,15 +1105,21 @@ function generateProceduralMusic({
       }
       mixClip(masterBuffer, bBuf, beatStart, 0.7);
 
-      // Ragtime FM Piano Chords on offbeats (2 and 4)
+      // Ragtime FM Piano Chords on offbeats (2 and 4) with seeded voicing
       if (beatInBar === 1 || beatInBar === 3) {
-        const triad = [chordRoot + 12, chordRoot + 16, chordRoot + 19];
+        const triad = (inversion === 0)
+          ? [chordRoot + 12, chordRoot + 16, chordRoot + 19]
+          : [chordRoot + 16, chordRoot + 19, chordRoot + 24];
         triad.forEach(m => {
           const pianoNote = SynthInstruments.fmNote(noteToFreq(m), beatDuration * 0.6, sampleRate, {
             modRatio: 2.0, modIndex: 1.8, decay: 6.0
           });
           mixClip(masterBuffer, pianoNote, beatStart, 0.25);
         });
+        mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.25);
+      }
+      if (b % 8 === 7 && beatInBar === 3) {
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 200, 75, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.5);
       }
     }
   }
@@ -1095,6 +1127,9 @@ function generateProceduralMusic({
   // 4. SUSPENSE / TENSION
   else if (genre === 'suspense') {
     const root = getMidiRoot(key, 2);
+    const bellIntervals = [1, 3, 6, 8, 11];
+    const eerieOffset = bellIntervals[Math.floor(rng() * bellIntervals.length)];
+
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
 
@@ -1118,11 +1153,14 @@ function generateProceduralMusic({
 
       // Eerie high cluster FM bell ping on beat 3
       if (b % 8 === 4) {
-        const pMidi = root + 36 + ((b % 16 === 4) ? 1 : 6);
+        const pMidi = root + 36 + eerieOffset;
         const bell = SynthInstruments.fmNote(noteToFreq(pMidi), beatDuration * 2.5, sampleRate, {
           modRatio: 3.5, modIndex: 3.0, decay: 1.8
         });
         mixClip(masterBuffer, reverb.process(bell, 0.6, 0.4), beatStart, 0.5);
+      }
+      if (b % 4 === 2) {
+        mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.2);
       }
     }
   }
@@ -1131,7 +1169,12 @@ function generateProceduralMusic({
   else if (genre === 'cinematic') {
     const root = getMidiRoot(key, 2);
     const chords = customChords || [root, root + 3, root + 7, root + 5];
-    const ostinato = [0, 0, 3, 0, 7, 0, 5, 0];
+    const ostinatoPool = [
+      [0, 0, 3, 0, 7, 0, 5, 0],
+      [0, 3, 7, 3, 8, 7, 5, 3],
+      [0, 0, 7, 0, 3, 0, 5, 0]
+    ];
+    const ostinato = ostinatoPool[Math.floor(rng() * ostinatoPool.length)];
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
@@ -1145,13 +1188,13 @@ function generateProceduralMusic({
       }
       // Marching snare on 2 and 4
       if (beatInBar === 1 || beatInBar === 3) {
-        mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart, 0.6);
+        mixClip(masterBuffer, SynthDrums.snare(sampleRate, { rng }), beatStart, 0.6);
         if (b % 8 === 7) {
-          mixClip(masterBuffer, SynthDrums.tom(sampleRate, 170, 70), beatStart + Math.floor(samplesPerBeat / 2), 0.55);
+          mixClip(masterBuffer, SynthDrums.tom(sampleRate, 170, 70, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.55);
         }
       }
       if (b % 8 === 0 && b > 0) {
-        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate), 0.5, 0.5), beatStart, 0.7);
+        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate, { rng }), 0.5, 0.5), beatStart, 0.7);
       }
 
       // Driving Staccato Strings Ostinato (8ths)
@@ -1193,7 +1236,12 @@ function generateProceduralMusic({
   else if (genre === 'happy') {
     const root = getMidiRoot(key, 3);
     const chords = customChords || [root, root + 7, root + 9, root + 5]; // I - V - vi - IV
-    const melodySteps = [0, 4, 7, 9, 12, 9, 7, 4];
+    const melodyPool = [
+      [0, 4, 7, 9, 12, 9, 7, 4],
+      [0, 2, 4, 7, 9, 12, 11, 7],
+      [0, 7, 9, 12, 14, 12, 9, 7]
+    ];
+    const melodySteps = melodyPool[Math.floor(rng() * melodyPool.length)];
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
@@ -1202,9 +1250,9 @@ function generateProceduralMusic({
       const currentRoot = chords[chordIdx];
 
       if (beatInBar === 0 || beatInBar === 2) mixClip(masterBuffer, SynthDrums.kick(sampleRate), beatStart, 0.7);
-      if (beatInBar === 1 || beatInBar === 3) mixClip(masterBuffer, SynthDrums.snare(sampleRate), beatStart, 0.65);
-      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart, 0.35);
-      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate), beatStart + Math.floor(samplesPerBeat / 2), 0.3);
+      if (beatInBar === 1 || beatInBar === 3) mixClip(masterBuffer, SynthDrums.snare(sampleRate, { rng }), beatStart, 0.65);
+      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate, { rng }), beatStart, 0.35);
+      mixClip(masterBuffer, SynthDrums.hihat_closed(sampleRate, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.3);
 
       // Walking Bassline (Triangle)
       const bassMidi = currentRoot - 12 + ((beatInBar === 2) ? 4 : (beatInBar === 3) ? 7 : 0);
@@ -1217,10 +1265,10 @@ function generateProceduralMusic({
       }
       mixClip(masterBuffer, bassBuf, beatStart, 0.6);
 
-      // Plucked Acoustic String Melody (Karplus-Strong physical modeling)
+      // Plucked Acoustic String Melody (Karplus-Strong physical modeling seeded with PRNG)
       const melIdx = (b * 2) % melodySteps.length;
       const melFreq = noteToFreq(currentRoot + 12 + melodySteps[melIdx]);
-      const plucked = SynthInstruments.pluckedString(melFreq, beatDuration * 0.85, sampleRate, { damping: 0.982 });
+      const plucked = SynthInstruments.pluckedString(melFreq, beatDuration * 0.85, sampleRate, { damping: 0.982, rng });
       mixClip(masterBuffer, plucked, beatStart, 0.45);
     }
   }
@@ -1229,7 +1277,12 @@ function generateProceduralMusic({
   else if (genre === 'dramatic') {
     const root = getMidiRoot(key, 2);
     const chords = customChords || [root, root + 3, root + 8, root + 7];
-    const harmMinor = [0, 3, 7, 8, 11, 12, 11, 8];
+    const harmPool = [
+      [0, 3, 7, 8, 11, 12, 11, 8],
+      [0, 7, 8, 11, 12, 11, 8, 3],
+      [0, 3, 7, 11, 12, 14, 12, 11]
+    ];
+    const harmMinor = harmPool[Math.floor(rng() * harmPool.length)];
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
@@ -1258,10 +1311,10 @@ function generateProceduralMusic({
 
       // Timpani roll fill on transition bars
       if (b % 4 === 3) {
-        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 140, 50), beatStart + Math.floor(samplesPerBeat / 2), 0.65);
+        mixClip(masterBuffer, SynthDrums.tom(sampleRate, 140, 50, { rng }), beatStart + Math.floor(samplesPerBeat / 2), 0.65);
       }
       if (b % 8 === 0 && b > 0) {
-        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate), 0.5, 0.5), beatStart, 0.8);
+        mixClip(masterBuffer, reverb.process(SynthDrums.crash(sampleRate, { rng }), 0.5, 0.5), beatStart, 0.8);
       }
     }
   }
@@ -1270,6 +1323,12 @@ function generateProceduralMusic({
   else if (genre === 'minimal') {
     const root = getMidiRoot(key, 3);
     const chords = customChords || [root, root + 5, root + 7, root];
+    const chordInversions = [
+      [root, root + 7, root + 10],
+      [root + 3, root + 7, root + 10],
+      [root - 5, root + 2, root + 7]
+    ];
+    const inversionOffset = Math.floor(rng() * chordInversions.length);
 
     for (let b = 0; b < totalBeats; b++) {
       const beatStart = b * samplesPerBeat;
@@ -1292,7 +1351,7 @@ function generateProceduralMusic({
 
       // Rhodes-like FM Electric Piano Triad on beat 2
       if (beatInBar === 1) {
-        const triad = [chordRoot, chordRoot + 7, chordRoot + 10]; // minor 7th
+        const triad = chordInversions[(barIdx + inversionOffset) % chordInversions.length];
         triad.forEach(m => {
           const rhodes = SynthInstruments.fmNote(noteToFreq(m), beatDuration * 1.8, sampleRate, {
             modRatio: 2.0, modIndex: 1.5, decay: 2.5
@@ -1301,10 +1360,10 @@ function generateProceduralMusic({
         });
       }
 
-      // Micro Percussion Click on offbeat
+      // Micro Percussion Click on offbeat (Using deterministic PRNG)
       const clickBuf = new Float32Array(Math.floor(0.015 * sampleRate));
       for (let i = 0; i < clickBuf.length; i++) {
-        clickBuf[i] = (Math.random() * 2.0 - 1.0) * Math.exp(-i / (0.003 * sampleRate));
+        clickBuf[i] = (rng() * 2.0 - 1.0) * Math.exp(-i / (0.003 * sampleRate));
       }
       mixClip(masterBuffer, clickBuf, beatStart + Math.floor(samplesPerBeat * 0.75), 0.25);
     }
@@ -1646,7 +1705,8 @@ async function renderMultitrackMix({
         genre: tr.music_genre,
         bpm: tr.bpm || 120,
         durationSeconds: tr.duration || 10.0,
-        seed: tr.seed,
+        key: tr.key || 'C',
+        seed: tr.seed !== undefined ? tr.seed : 1337,
         sampleRate
       });
     }
@@ -1691,26 +1751,36 @@ async function renderMultitrackMix({
 
     // C. Volume & Keyframed Automation
     const baseVol = Math.max(0, Math.min(parseFloat(tr.volume !== undefined ? tr.volume : 1.0), 3.0));
-    if (Array.isArray(tr.volume_automation) && tr.volume_automation.length > 1) {
-      const kfs = [...tr.volume_automation].sort((a, b) => a.time - b.time);
-      for (let i = 0; i < activeSamples; i++) {
-        const t = i / sampleRate;
-        let volAtT = baseVol;
-        if (t <= kfs[0].time) {
-          volAtT = kfs[0].volume;
-        } else if (t >= kfs[kfs.length - 1].time) {
-          volAtT = kfs[kfs.length - 1].volume;
-        } else {
-          for (let k = 0; k < kfs.length - 1; k++) {
-            if (t >= kfs[k].time && t <= kfs[k + 1].time) {
-              const span = kfs[k + 1].time - kfs[k].time;
-              const frac = span > 0.0001 ? (t - kfs[k].time) / span : 0;
-              volAtT = kfs[k].volume + frac * (kfs[k + 1].volume - kfs[k].volume);
-              break;
+    if (Array.isArray(tr.volume_automation) && tr.volume_automation.length > 0) {
+      const kfs = tr.volume_automation.map(pt => ({
+        time: parseFloat(pt.time !== undefined ? pt.time : (pt.time_sec !== undefined ? pt.time_sec : 0)),
+        volume: Math.max(0, Math.min(3.0, parseFloat(pt.volume !== undefined ? pt.volume : (pt.gain !== undefined ? pt.gain : 1.0))))
+      })).sort((a, b) => a.time - b.time);
+
+      if (kfs.length === 1) {
+        for (let i = 0; i < activeSamples; i++) {
+          clipBuf[i] *= kfs[0].volume;
+        }
+      } else {
+        for (let i = 0; i < activeSamples; i++) {
+          const t = i / sampleRate;
+          let volAtT = baseVol;
+          if (t <= kfs[0].time) {
+            volAtT = kfs[0].volume;
+          } else if (t >= kfs[kfs.length - 1].time) {
+            volAtT = kfs[kfs.length - 1].volume;
+          } else {
+            for (let k = 0; k < kfs.length - 1; k++) {
+              if (t >= kfs[k].time && t <= kfs[k + 1].time) {
+                const span = kfs[k + 1].time - kfs[k].time;
+                const frac = span > 0.00001 ? (t - kfs[k].time) / span : 0;
+                volAtT = kfs[k].volume + frac * (kfs[k + 1].volume - kfs[k].volume);
+                break;
+              }
             }
           }
+          clipBuf[i] *= volAtT;
         }
-        clipBuf[i] *= volAtT;
       }
     } else {
       for (let i = 0; i < activeSamples; i++) {
@@ -1725,16 +1795,26 @@ async function renderMultitrackMix({
     if (endSample > maxSamples) maxSamples = endSample;
 
     // Track classification for speech ducking
-    const isSpeech = Boolean(
-      tr.is_speech ||
-      tr.type === 'speech' ||
-      (tr.name && /speech|voice|vocal|dialogue/i.test(tr.name))
-    );
-    const isDucked = Boolean(
-      tr.is_ducked ||
-      tr.type === 'music' ||
-      Boolean(tr.music_genre)
-    );
+    // Explicit user settings MUST strictly override automatic classification
+    let isSpeech = false;
+    if (tr.is_speech !== undefined && tr.is_speech !== null) {
+      isSpeech = Boolean(tr.is_speech);
+    } else {
+      isSpeech = Boolean(
+        tr.type === 'speech' ||
+        (tr.name && /speech|voice|vocal|dialogue/i.test(tr.name))
+      );
+    }
+
+    let isDucked = false;
+    if (tr.is_ducked !== undefined && tr.is_ducked !== null) {
+      isDucked = Boolean(tr.is_ducked);
+    } else {
+      isDucked = Boolean(
+        tr.type === 'music' ||
+        Boolean(tr.music_genre)
+      );
+    }
 
     loadedTracks.push({
       name: tr.name || 'Track',

@@ -1195,7 +1195,7 @@
           <div>
             <h2 style="font-size:18px; font-weight:700;">Meme Audio Studio & Multitrack Timeline</h2>
             <p style="font-size:12px; color:var(--text-muted); margin-top:2px;">
-              Multi-stem DAW timeline with speech-triggered ducking, clip trimming, precision fades, and arbitrary tracks.
+              Multitrack timeline mixer: Speech-triggered background music ducking, clip trimming, cosine fades, keyframed volume automation, and procedural synthesis.
             </p>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
@@ -1956,7 +1956,8 @@
         fade_out_ms: 100,
         volume: 1.0,
         is_speech: true,
-        is_ducked: false
+        is_ducked: false,
+        volume_automation: []
       },
       {
         id: 'track_' + Math.random().toString(36).substring(2, 8),
@@ -1973,7 +1974,8 @@
         fade_out_ms: 300,
         volume: 0.45,
         is_speech: false,
-        is_ducked: true // Ducks under speech!
+        is_ducked: true, // Ducks under speech!
+        volume_automation: []
       },
       {
         id: 'track_' + Math.random().toString(36).substring(2, 8),
@@ -1987,7 +1989,8 @@
         fade_out_ms: 50,
         volume: 0.9,
         is_speech: false,
-        is_ducked: false
+        is_ducked: false,
+        volume_automation: []
       }
     ];
 
@@ -2030,7 +2033,8 @@
         fade_out_ms: type === 'music' ? 200 : 50,
         volume: type === 'music' ? 0.5 : 1.0,
         is_speech: type === 'speech',
-        is_ducked: type === 'music'
+        is_ducked: type === 'music',
+        volume_automation: []
       });
       renderMemeTracksUI();
     }
@@ -2049,6 +2053,57 @@
         tr[prop] = value;
         renderTimelineVisualizer();
       }
+    }
+
+    function addTrackAutomationPoint(trackId) {
+      const tr = memeTracks.find(t => t.id === trackId);
+      if (!tr) return;
+      if (!Array.isArray(tr.volume_automation)) tr.volume_automation = [];
+      const currentLen = tr.volume_automation.length;
+      const dur = parseFloat(tr.duration || 5.0);
+      const time = currentLen === 0 ? 0.0 : Math.min(dur, Math.round(((tr.volume_automation[currentLen - 1].time || 0) + 1.0) * 10) / 10);
+      tr.volume_automation.push({ time, volume: 1.0 });
+      renderMemeTracksUI();
+    }
+
+    function updateTrackAutomationPoint(trackId, index, field, value) {
+      const tr = memeTracks.find(t => t.id === trackId);
+      if (!tr || !tr.volume_automation || !tr.volume_automation[index]) return;
+      tr.volume_automation[index][field] = parseFloat(value);
+    }
+
+    function removeTrackAutomationPoint(trackId, index) {
+      const tr = memeTracks.find(t => t.id === trackId);
+      if (!tr || !tr.volume_automation) return;
+      tr.volume_automation.splice(index, 1);
+      renderMemeTracksUI();
+    }
+
+    function applyAutomationPreset(trackId, preset) {
+      const tr = memeTracks.find(t => t.id === trackId);
+      if (!tr) return;
+      const dur = parseFloat(tr.duration || 5.0);
+      if (preset === 'fade_in') {
+        tr.volume_automation = [
+          { time: 0.0, volume: 0.0 },
+          { time: Math.round(Math.min(2.0, dur) * 10) / 10, volume: 1.0 }
+        ];
+      } else if (preset === 'fade_out') {
+        tr.volume_automation = [
+          { time: Math.round(Math.max(0.0, dur - 2.0) * 10) / 10, volume: 1.0 },
+          { time: Math.round(dur * 10) / 10, volume: 0.0 }
+        ];
+      } else if (preset === 'duck_middle') {
+        tr.volume_automation = [
+          { time: 0.0, volume: 1.0 },
+          { time: Math.round(dur * 0.25 * 10) / 10, volume: 0.2 },
+          { time: Math.round(dur * 0.75 * 10) / 10, volume: 0.2 },
+          { time: Math.round(dur * 10) / 10, volume: 1.0 }
+        ];
+      } else if (preset === 'clear') {
+        tr.volume_automation = [];
+      }
+      renderMemeTracksUI();
     }
 
     async function previewSingleTrack(id) {
@@ -2242,10 +2297,45 @@
               <div style="display:flex; flex-direction:column; justify-content:center;">
                 <label style="font-size:10px; color:var(--text-muted); display:block;">Ducking</label>
                 <label style="font-size:11px; display:flex; align-items:center; gap:6px; cursor:pointer;">
-                  <input type="checkbox" ${tr.is_ducked ? 'checked' : ''} onchange="updateMemeTrackProp('${tr.id}', 'is_ducked', this.checked)">
+                  <input type="checkbox" id="ducking_toggle_${tr.id}" ${tr.is_ducked ? 'checked' : ''} onchange="updateMemeTrackProp('${tr.id}', 'is_ducked', this.checked)">
                   <span style="color:${tr.is_ducked ? 'var(--accent-purple)' : 'var(--text-muted)'}; font-weight:600;">Duck Under Speech</span>
                 </label>
               </div>
+            </div>
+
+            <!-- KEYFRAMED VOLUME AUTOMATION EDITOR -->
+            <div style="margin-top:10px; background:rgba(0,0,0,0.22); border:1px solid rgba(255,255,255,0.06); padding:8px 12px; border-radius:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:11px; font-weight:600; color:var(--text-primary);">📈 Volume Automation Keyframes (${(tr.volume_automation || []).length} pts)</span>
+                  <span style="font-size:10px; color:var(--text-muted);">(Piecewise linear gain automation)</span>
+                </div>
+                <div style="display:flex; gap:6px;">
+                  <button class="btn-transport" style="font-size:10px; padding:2px 8px;" onclick="addTrackAutomationPoint('${tr.id}')">+ Add Point</button>
+                  <button class="btn-transport" style="font-size:10px; padding:2px 6px;" onclick="applyAutomationPreset('${tr.id}', 'fade_in')" title="Preset: Fade In">Fade In</button>
+                  <button class="btn-transport" style="font-size:10px; padding:2px 6px;" onclick="applyAutomationPreset('${tr.id}', 'fade_out')" title="Preset: Fade Out">Fade Out</button>
+                  <button class="btn-transport" style="font-size:10px; padding:2px 6px;" onclick="applyAutomationPreset('${tr.id}', 'duck_middle')" title="Preset: Dip in Middle">Dip</button>
+                  <button class="btn-transport" style="font-size:10px; padding:2px 6px;" onclick="applyAutomationPreset('${tr.id}', 'clear')" title="Clear all keyframes">Clear</button>
+                </div>
+              </div>
+
+              ${(tr.volume_automation && tr.volume_automation.length > 0) ? `
+                <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+                  ${tr.volume_automation.map((pt, kIdx) => `
+                    <div style="display:inline-flex; align-items:center; gap:4px; background:rgba(255,255,255,0.05); padding:3px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.08); font-size:10px;">
+                      <span style="color:var(--text-muted);">#${kIdx + 1}</span>
+                      <span>Time:</span>
+                      <input type="number" step="0.1" min="0" max="${tr.duration || 60}" value="${pt.time}" style="width:50px; font-size:10px; padding:1px 3px; background:var(--bg-primary); border:1px solid var(--border-color); color:var(--text-primary); border-radius:3px;" onchange="updateTrackAutomationPoint('${tr.id}', ${kIdx}, 'time', this.value)">
+                      <span>s</span>
+                      <span style="margin-left:4px;">Gain:</span>
+                      <input type="number" step="0.05" min="0" max="2.0" value="${pt.volume}" style="width:48px; font-size:10px; padding:1px 3px; background:var(--bg-primary); border:1px solid var(--border-color); color:var(--text-primary); border-radius:3px;" onchange="updateTrackAutomationPoint('${tr.id}', ${kIdx}, 'volume', this.value)">
+                      <button style="background:none; border:none; color:var(--accent-red); cursor:pointer; font-size:11px; padding:0 2px;" onclick="removeTrackAutomationPoint('${tr.id}', ${kIdx})" title="Delete point">×</button>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : `
+                <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">No automation keyframes configured (fixed base volume applied). Click "+ Add Point" or a preset to create automation curve.</div>
+              `}
             </div>
           </div>
         `;
@@ -2273,6 +2363,9 @@
           fade_in_ms: parseFloat(t.fade_in_ms || 0),
           fade_out_ms: parseFloat(t.fade_out_ms || 0),
           volume: parseFloat(t.volume !== undefined ? t.volume : 1.0),
+          volume_automation: (Array.isArray(t.volume_automation) && t.volume_automation.length > 0)
+            ? t.volume_automation.map(pt => ({ time: parseFloat(pt.time || 0), volume: parseFloat(pt.volume !== undefined ? pt.volume : 1.0) }))
+            : undefined,
           is_speech: Boolean(t.is_speech),
           is_ducked: Boolean(t.is_ducked)
         }));

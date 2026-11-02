@@ -22,7 +22,12 @@ This repository (`openvoice-studio`) contains production-grade neural speech syn
   * Procedural audio must never download weights, call cloud APIs, or load neural models.
   * All waveforms must originate from mathematical oscillators, noise generators, IIR/FIR filters, and DSP math.
 * **Deterministic Reproducibility**:
-  * Algorithmic generation functions must support deterministic random seeding (e.g. PRNG) to allow identical reproduction of compositions.
+  * Algorithmic generation functions must support deterministic random seeding (e.g. Mulberry32 PRNG) to allow identical reproduction of compositions.
+  * Every random path in procedural music (SynthDrums noise, Karplus-Strong string initialization, micro-percussion, chord voicings, and motif variations) must pass through the seeded PRNG.
+  * Zero uncontrolled `Math.random()` calls are permitted within seeded generation paths. Same settings + same seed must yield 100% bitwise-identical audio samples across all genres.
+* **Multitrack Stem Mixer & Ducking Precedence**:
+  * Explicit track configuration (`is_ducked: false` or `is_ducked: true`) must strictly override any heuristic type-based classification. When a user disables ducking on a music track, it must never be attenuated during speech.
+  * Timeline supports keyframed volume automation (`volume_automation: [{ time, volume }]`), piecewise linear gain interpolation, clip trimming, and cosine fades.
 * **Audio Safety & Clipping Guard**:
   * All audio mixing, ducking, and synthesis routines must pass through brickwall soft-saturation limiting (-1.0 dBFS ceiling) to prevent digital harshness and inter-sample clipping.
 
@@ -34,7 +39,10 @@ This repository (`openvoice-studio`) contains production-grade neural speech syn
   * For procedural audio & timeline mixer: `node backend/test_procedural.js`
   * For neural speech & system core: `node backend/test_suite.js`
 * Maintain distinct test separation: clearly distinguish unit assertions from end-to-end integration test cases in test runners.
-* Use real generated speech assets (from local ONNX inference or cached studio runs) for multitrack timeline integration tests.
+* **Portable Test Fixtures**:
+  * Never rely on gitignored audio assets to pass integration tests.
+  * Test suites must dynamically generate required temporary speech fixtures through local neural inference when models are present.
+  * If neural models are uninstalled, report tests honestly as skipped (`skipE2E`) rather than falsely passing them, while generating synthetic speech fixtures so procedural mixer tests run completely independently on fresh clones.
 
 ---
 
@@ -43,3 +51,4 @@ This repository (`openvoice-studio`) contains production-grade neural speech syn
 * Keep working directory clean.
 * Exclude generated test audio files and temporary buffers from git via `.gitignore`.
 * Stage and commit only relevant files with precise, conventional commit messages.
+

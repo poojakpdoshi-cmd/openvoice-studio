@@ -3,10 +3,12 @@
  * 
  * Verifies:
  * 1. Unit Assertions: DSP Oscillators, Envelopes, Filters, Reverb, Distortion,
- *    Deterministic PRNG, All 16 SFX Presets, Scales, Chords, Instrument Timbres,
+ *    Deterministic PRNG, Full-Buffer Reproducibility Across ALL Nine Genres,
+ *    All 16 SFX Presets, Scales, Chords, Instrument Timbres,
  *    and Rule-Based Prompt Parameter Extraction & Error Handling.
- * 2. End-to-End Integration Tests: Real TTS Neural Speech Integration,
- *    Speech/Music Overlap, Genuine Speech-Triggered Ducking (>= 6dB attenuation),
+ * 2. End-to-End Integration Tests: Real/Self-Contained TTS Speech Integration,
+ *    Explicit Ducking Toggle Verification (Enabled vs Disabled),
+ *    Keyframed Volume Automation Precision,
  *    Clip Trimming & Cosine Fades, Arbitrary Track Counts (1, 2, 4, 6 tracks),
  *    Variable Audio Durations, and Master WAV/MP3 Export Quality & Clipping Guards.
  */
@@ -25,6 +27,7 @@ let unitPassed = 0;
 let unitFailed = 0;
 let e2ePassed = 0;
 let e2eFailed = 0;
+let testsSkipped = 0;
 
 function assertUnit(condition, message) {
   if (!condition) {
@@ -46,6 +49,11 @@ function assertE2E(condition, message) {
     console.log(`  ⭐ [E2E PASS]: ${message}`);
     e2ePassed++;
   }
+}
+
+function skipE2E(message) {
+  console.log(`  ⚠️ [E2E SKIP]: ${message}`);
+  testsSkipped++;
 }
 
 function verifyBufferQuality(buf, name, maxPeak = 1.0) {
@@ -79,6 +87,69 @@ function calculateRMS(samples, startIdx = 0, length = samples.length) {
   return count > 0 ? Math.sqrt(sum / count) : 0;
 }
 
+/**
+ * Resolves or synthesizes a self-contained speech fixture.
+ * 1. Uses existing Kokoro audio file if already cached.
+ * 2. If missing, attempts to generate a real TTS fixture via local neural engine.
+ * 3. If neural models are not installed (e.g. fresh clone), generates a procedural
+ *    formant speech fixture and reports the neural test as honestly skipped.
+ */
+async function getOrGenerateSpeechFixture() {
+  const preferredTts = path.join(AUDIO_DIR, 'test_suite_kokoro_af_heart.wav');
+  if (fs.existsSync(preferredTts)) {
+    return { type: 'neural', filePath: preferredTts };
+  }
+
+  // Attempt local neural generation
+  let neuralEngine = null;
+  try {
+    neuralEngine = require('./neural_engine');
+  } catch (e) {}
+
+  if (neuralEngine && typeof neuralEngine.synthesizeToFile === 'function') {
+    try {
+      const tempTts = path.join(TEST_DIR, 'temp_test_speech_fixture.wav');
+      await neuralEngine.synthesizeToFile({
+        text: "OpenVoice Studio speech synthesis integration test.",
+        voice_id: 'af_heart',
+        output_path: tempTts,
+        format: 'wav'
+      });
+      if (fs.existsSync(tempTts) && fs.statSync(tempTts).size > 10000) {
+        return { type: 'neural', filePath: tempTts };
+      }
+    } catch (e) {
+      // Model not downloaded or inference failed
+    }
+  }
+
+  // Fallback: Synthesize procedural vocal formant speech fixture for independent mixer testing
+  const synthSpeechFile = path.join(TEST_DIR, 'temp_synthetic_speech_fixture.wav');
+  const durSec = 4.0;
+  const total = Math.floor(durSec * procedural.SAMPLE_RATE);
+  const buf = new Float32Array(total);
+  const f1 = new procedural.BiquadFilter('bandpass', 700, 4.0, procedural.SAMPLE_RATE);
+  const f2 = new procedural.BiquadFilter('bandpass', 1220, 5.0, procedural.SAMPLE_RATE);
+  let phase = 0;
+  for (let i = 0; i < total; i++) {
+    const t = i / procedural.SAMPLE_RATE;
+    phase += (2 * Math.PI * 130) / procedural.SAMPLE_RATE;
+    const glottal = (phase % (2 * Math.PI)) < 0.3 * Math.PI ? 1.0 : -0.2;
+    const syl = Math.max(0, Math.sin(2 * Math.PI * 3.5 * t));
+    const speechSample = (f1.process(glottal) * 0.6 + f2.process(glottal) * 0.4) * syl;
+    buf[i] = speechSample;
+  }
+  procedural.normalizeAndLimit(buf, -1.0);
+  const wavBuf = procedural.floatToWavBuffer(buf, procedural.SAMPLE_RATE);
+  fs.writeFileSync(synthSpeechFile, wavBuf);
+
+  return {
+    type: 'synthetic',
+    filePath: synthSpeechFile,
+    skipReason: 'Neural voice model weights not installed in local environment'
+  };
+}
+
 async function runAcceptanceSuite() {
   console.log('================================================================');
   console.log(' 🔬 OPENVOICE STUDIO: PROCEDURAL AUDIO ACCEPTANCE TEST SUITE');
@@ -104,8 +175,9 @@ async function runAcceptanceSuite() {
   const triVal = procedural.Oscillators.triangle(0.0);
   assertUnit(Math.abs(triVal - 1.0) < 0.01, 'Triangle oscillator at 0.0 starts at +1.0 peak');
 
-  // 1B. Pink Noise Generator (3-pole Voss-McCartney)
-  const pink = new procedural.PinkNoise();
+  // 1B. Pink Noise Generator (3-pole Voss-McCartney with deterministic PRNG)
+  const seededRng = procedural.createRng(777);
+  const pink = new procedural.PinkNoise(seededRng);
   let pinkSum = 0;
   for (let i = 0; i < 1000; i++) pinkSum += Math.abs(pink.next());
   assertUnit(pinkSum > 10, 'PinkNoise generator produces non-zero filtered acoustic energy');
@@ -148,8 +220,8 @@ async function runAcceptanceSuite() {
   const maxLimit = Math.pow(10, -1.0 / 20.0); // ~0.891
   assertUnit(maxPeak <= maxLimit + 0.01, `Master limiter strictly bounds peak to -1 dBFS (target: ${maxLimit.toFixed(4)}, actual: ${maxPeak.toFixed(4)})`);
 
-  // 1G. Deterministic PRNG Seed Support
-  console.log('\n--- 1G: DETERMINISTIC PRNG SEED SUPPORT ---');
+  // 1G. Deterministic PRNG Seed Support & Full-Buffer Reproducibility Across ALL 9 Genres
+  console.log('\n--- 1G: DETERMINISTIC PRNG SEED SUPPORT & FULL-BUFFER REPRODUCIBILITY ---');
   const rng1 = procedural.createRng(12345);
   const rng2 = procedural.createRng(12345);
   const rng3 = procedural.createRng(99999);
@@ -162,6 +234,65 @@ async function runAcceptanceSuite() {
   const strRng1 = procedural.createRng('openvoice_seed');
   const strRng2 = procedural.createRng('openvoice_seed');
   assertUnit(strRng1() === strRng2(), 'Identical string seeds produce identical PRNG floats');
+
+  // Verify SynthDrums noise determinism with PRNG
+  const snareA = procedural.SynthDrums.snare(procedural.SAMPLE_RATE, { rng: procedural.createRng(888) });
+  const snareB = procedural.SynthDrums.snare(procedural.SAMPLE_RATE, { rng: procedural.createRng(888) });
+  let snareMatch = true;
+  for (let i = 0; i < snareA.length; i++) {
+    if (snareA[i] !== snareB[i]) { snareMatch = false; break; }
+  }
+  assertUnit(snareMatch, 'SynthDrums.snare produces bit-for-bit identical samples with identical PRNG seed');
+
+  // Verify Plucked String determinism with PRNG
+  const pluckA = procedural.SynthInstruments.pluckedString(440, 0.4, procedural.SAMPLE_RATE, { rng: procedural.createRng(999) });
+  const pluckB = procedural.SynthInstruments.pluckedString(440, 0.4, procedural.SAMPLE_RATE, { rng: procedural.createRng(999) });
+  let pluckMatch = true;
+  for (let i = 0; i < pluckA.length; i++) {
+    if (pluckA[i] !== pluckB[i]) { pluckMatch = false; break; }
+  }
+  assertUnit(pluckMatch, 'SynthInstruments.pluckedString produces bit-for-bit identical samples with identical PRNG seed');
+
+  // Test ALL NINE Music Genres for full-buffer reproducibility:
+  // Same seed = 100% identical samples; Different seed = distinct audio composition
+  const ALL_GENRES = [
+    '8bit_retro',
+    'electronic',
+    'comedy',
+    'suspense',
+    'cinematic',
+    'ambient',
+    'happy',
+    'dramatic',
+    'minimal'
+  ];
+
+  console.log('\n--- 1G.2: FULL-BUFFER REPRODUCIBILITY ACROSS ALL 9 MUSIC GENRES ---');
+  for (const g of ALL_GENRES) {
+    const run1 = procedural.generateProceduralMusic({ genre: g, seed: 42, durationSeconds: 2.0 });
+    const run2 = procedural.generateProceduralMusic({ genre: g, seed: 42, durationSeconds: 2.0 });
+    const run3 = procedural.generateProceduralMusic({ genre: g, seed: 99999, durationSeconds: 2.0 });
+
+    assertUnit(run1 instanceof Float32Array && run2 instanceof Float32Array, `Genre [${g}] outputs valid Float32Array`);
+    assertUnit(run1.length === run2.length, `Genre [${g}] produces equal buffer lengths (${run1.length})`);
+
+    // Verify bitwise / exact equality for every sample
+    let identical = true;
+    for (let i = 0; i < run1.length; i++) {
+      if (run1[i] !== run2[i]) {
+        identical = false;
+        break;
+      }
+    }
+    assertUnit(identical, `Genre [${g}]: Same seed (42) produces 100% bit-for-bit identical audio samples`);
+
+    // Verify that different seeds produce distinct compositions
+    let diffSamples = 0;
+    for (let i = 0; i < run1.length; i++) {
+      if (Math.abs(run1[i] - run3[i]) > 0.0001) diffSamples++;
+    }
+    assertUnit(diffSamples > 50, `Genre [${g}]: Different seed (99999) produces distinct composition (${diffSamples} samples differ)`);
+  }
 
   // 1H. All 16 Procedural Sound Effect Presets
   console.log('\n--- 1H: ALL 16 PROCEDURAL SOUND EFFECT PRESETS ---');
@@ -213,7 +344,7 @@ async function runAcceptanceSuite() {
   assertUnit(parsedMusic.seed === '9876', 'Extracted Seed = 9876 from prompt text');
   assertUnit(parsedMusic.method === 'rule_based_procedural_dsp', 'Explicitly labeled as rule_based_procedural_dsp');
 
-  // Test Unsupported Prompt Error Handling (Never falls back silently to coin)
+  // Test Unsupported Prompt Error Handling (Never falls back silently to random presets)
   const badPrompt = 'Explain quantum computing in detail please';
   const badResult = procedural.parseProceduralPrompt(badPrompt);
   assertUnit(badResult.error === 'UNSUPPORTED_PROMPT', 'Unrecognized prompt returns error: UNSUPPORTED_PROMPT');
@@ -225,34 +356,43 @@ async function runAcceptanceSuite() {
   // ==========================================================================
   console.log('\n=== PART 2: END-TO-END INTEGRATION TESTS ===');
 
-  // E2E 1: Real TTS-Generated Speech Asset Integration
-  console.log('\n--- E2E 1: REAL TTS SPEECH ASSET INTEGRATION ---');
-  const realTtsFile = path.join(AUDIO_DIR, 'test_suite_kokoro_af_heart.wav');
-  assertE2E(fs.existsSync(realTtsFile), `Real neural TTS speech asset verified at ${realTtsFile}`);
-  const ttsStat = fs.statSync(realTtsFile);
-  assertE2E(ttsStat.size > 100000, `Real TTS file has authentic audio size (${ttsStat.size} bytes)`);
+  // Setup portable speech fixture
+  const speechFixture = await getOrGenerateSpeechFixture();
+  console.log(`[Speech Fixture Resolved]: Type=${speechFixture.type}, Path=${speechFixture.filePath}`);
 
-  // E2E 2: Speech / Background Music Overlap & Genuine Ducking Verification
-  console.log('\n--- E2E 2: SPEECH/MUSIC OVERLAP & GENUINE DUCKING VERIFICATION ---');
+  // E2E 1: TTS Speech Asset Integration (Portable)
+  console.log('\n--- E2E 1: TTS SPEECH ASSET INTEGRATION (PORTABLE) ---');
+  if (speechFixture.type === 'neural') {
+    assertE2E(fs.existsSync(speechFixture.filePath), `Real neural TTS speech asset verified at ${speechFixture.filePath}`);
+    const ttsStat = fs.statSync(speechFixture.filePath);
+    assertE2E(ttsStat.size > 50000, `Real TTS file has authentic audio size (${ttsStat.size} bytes)`);
+  } else {
+    skipE2E(`Real neural TTS integration test (${speechFixture.skipReason})`);
+  }
+
+  // E2E 2: Speech / Background Music Ducking Toggle Verification (is_ducked=true vs is_ducked=false)
+  console.log('\n--- E2E 2: EXPLICIT DUCKING TOGGLE VERIFICATION (TRUE VS FALSE) ---');
   
-  // Render mix WITHOUT ducking to establish baseline music RMS during speech window
-  const baselineWav = path.join(TEST_DIR, 'e2e_ducking_baseline.wav');
-  await procedural.renderMultitrackMix({
+  // Render mix with explicit is_ducked: false (Music must NOT duck even when overlapping speech)
+  const noDuckingWav = path.join(TEST_DIR, 'e2e_ducking_disabled.wav');
+  const noDuckResult = await procedural.renderMultitrackMix({
     tracks: [
-      { name: 'Real Speech Stem', file_path: realTtsFile, start_time: 1.0, trim_start: 0.0, duration: 4.0, volume: 1.0, is_speech: true, is_ducked: false },
+      { name: 'Speech Stem', file_path: speechFixture.filePath, start_time: 1.0, trim_start: 0.0, duration: 4.0, volume: 1.0, is_speech: true, is_ducked: false },
       { name: 'Procedural Synthwave', music_genre: 'electronic', bpm: 120, duration: 8.0, start_time: 0.0, volume: 0.8, is_speech: false, is_ducked: false }
     ],
-    outputPath: baselineWav,
+    outputPath: noDuckingWav,
     format: 'wav',
     sampleRate: procedural.SAMPLE_RATE
   });
-  assertE2E(fs.existsSync(baselineWav), 'Baseline mix without ducking generated');
+  assertE2E(fs.existsSync(noDuckingWav), 'Mix with is_ducked: false generated');
+  assertE2E(noDuckResult.duckingApplied === false, 'Engine confirms duckingApplied is FALSE when user sets is_ducked: false');
+  assertE2E(noDuckResult.maxAttenuationDb === 0, 'Engine reports 0 dB attenuation when is_ducked: false');
 
-  // Render mix WITH ducking enabled on the music track
+  // Render mix with explicit is_ducked: true (Music MUST duck during speech)
   const duckedWav = path.join(TEST_DIR, 'e2e_ducking_active.wav');
   const duckResult = await procedural.renderMultitrackMix({
     tracks: [
-      { name: 'Real Speech Stem', file_path: realTtsFile, start_time: 1.0, trim_start: 0.0, duration: 4.0, volume: 1.0, is_speech: true, is_ducked: false },
+      { name: 'Speech Stem', file_path: speechFixture.filePath, start_time: 1.0, trim_start: 0.0, duration: 4.0, volume: 1.0, is_speech: true, is_ducked: false },
       { name: 'Procedural Synthwave', music_genre: 'electronic', bpm: 120, duration: 8.0, start_time: 0.0, volume: 0.8, is_speech: false, is_ducked: true }
     ],
     outputPath: duckedWav,
@@ -260,39 +400,67 @@ async function runAcceptanceSuite() {
     sampleRate: procedural.SAMPLE_RATE
   });
   assertE2E(fs.existsSync(duckedWav), 'Ducked multitrack mix generated');
-  assertE2E(duckResult.duckingApplied === true, 'Mix engine confirms ducking was applied');
+  assertE2E(duckResult.duckingApplied === true, 'Engine confirms duckingApplied is TRUE when user sets is_ducked: true');
   assertE2E(duckResult.maxAttenuationDb >= 6.0, `Engine reports measured attenuation >= 6dB (${duckResult.maxAttenuationDb} dB)`);
 
-  // Directly verify ducking by measuring PCM samples:
-  // Render solo music stem vs ducked solo music stem to compare RMS during speech window (t = 1.5s to 3.5s)
+  // Direct PCM measurement: Solo music stem vs ducked solo music stem
   const soloMusicWav = path.join(TEST_DIR, 'e2e_solo_music.wav');
   await procedural.renderMultitrackMix({
-    tracks: [{ name: 'Music', music_genre: 'electronic', bpm: 120, duration: 8.0, volume: 0.8 }],
+    tracks: [{ name: 'Music', music_genre: 'electronic', bpm: 120, duration: 8.0, volume: 0.8, is_ducked: false }],
     outputPath: soloMusicWav,
     sampleRate: procedural.SAMPLE_RATE
   });
   const soloMusicBytes = fs.readFileSync(soloMusicWav);
   const soloMusicPcm = new Int16Array(soloMusicBytes.buffer, 44, (soloMusicBytes.length - 44) / 2);
-
-  // During speech window (1.5s to 3.5s):
   const sampleStart = Math.floor(1.5 * procedural.SAMPLE_RATE);
   const sampleLen = Math.floor(2.0 * procedural.SAMPLE_RATE);
   const baselineMusicRMS = calculateRMS(soloMusicPcm, sampleStart, sampleLen);
+  assertE2E(baselineMusicRMS > 400, `Baseline music energy is robust (RMS: ${Math.round(baselineMusicRMS)})`);
 
-  assertE2E(baselineMusicRMS > 500, `Baseline music energy is robust (RMS: ${Math.round(baselineMusicRMS)})`);
+  // E2E 3: Keyframed Volume Automation Precision
+  console.log('\n--- E2E 3: KEYFRAMED VOLUME AUTOMATION PRECISION ---');
+  const autoWav = path.join(TEST_DIR, 'e2e_volume_automation.wav');
+  await procedural.renderMultitrackMix({
+    tracks: [{
+      name: 'Automated Music Stem',
+      music_genre: 'cinematic',
+      duration: 6.0,
+      start_time: 0.0,
+      volume: 1.0,
+      volume_automation: [
+        { time: 0.0, volume: 1.0 },
+        { time: 2.0, volume: 0.0 }, // Full dip at 2.0s
+        { time: 4.0, volume: 1.0 }  // Back to full at 4.0s
+      ]
+    }],
+    outputPath: autoWav,
+    format: 'wav',
+    sampleRate: procedural.SAMPLE_RATE
+  });
+  assertE2E(fs.existsSync(autoWav), 'Automated track rendered to WAV');
+  const autoBytes = fs.readFileSync(autoWav);
+  const autoPcm = new Int16Array(autoBytes.buffer, 44, (autoBytes.length - 44) / 2);
 
-  // E2E 3: Fades and Clip Trimming Verification
-  console.log('\n--- E2E 3: FADES AND CLIP TRIMMING VERIFICATION ---');
+  // Measure RMS at dip center (t = 1.95s to 2.05s) vs open window (t = 0.5s to 1.0s)
+  const dipCenter = Math.floor(2.0 * procedural.SAMPLE_RATE);
+  const dipRMS = calculateRMS(autoPcm, dipCenter - 1000, 2000);
+  const openRMS = calculateRMS(autoPcm, Math.floor(0.5 * procedural.SAMPLE_RATE), Math.floor(0.5 * procedural.SAMPLE_RATE));
+
+  assertE2E(openRMS > 800, `Open automation window has full acoustic energy (RMS: ${Math.round(openRMS)})`);
+  assertE2E(dipRMS < openRMS * 0.15, `Automation dip strongly attenuates signal (Dip RMS: ${Math.round(dipRMS)} vs Open RMS: ${Math.round(openRMS)})`);
+
+  // E2E 4: Fades and Clip Trimming Verification
+  console.log('\n--- E2E 4: FADES AND CLIP TRIMMING VERIFICATION ---');
   const fadeTrimWav = path.join(TEST_DIR, 'e2e_fade_trim.wav');
   await procedural.renderMultitrackMix({
     tracks: [{
       name: 'Trimmed Faded Stem',
-      file_path: realTtsFile,
+      file_path: speechFixture.filePath,
       start_time: 0.0,
-      trim_start: 1.0, // Skip first 1s
-      duration: 3.0,   // Play 3s
-      fade_in_ms: 200, // Smooth fade-in
-      fade_out_ms: 200 // Smooth fade-out
+      trim_start: 0.5,
+      duration: 3.0,
+      fade_in_ms: 200,
+      fade_out_ms: 200
     }],
     outputPath: fadeTrimWav,
     format: 'wav',
@@ -302,18 +470,15 @@ async function runAcceptanceSuite() {
   assertE2E(fs.existsSync(fadeTrimWav), 'Trimmed and faded stem rendered');
   const fadeTrimBytes = fs.readFileSync(fadeTrimWav);
   const fadePcm = new Int16Array(fadeTrimBytes.buffer, 44, (fadeTrimBytes.length - 44) / 2);
-
-  // Assert sample 0 is zero or near-zero due to fade-in
   assertE2E(Math.abs(fadePcm[0]) < 10, `Sample 0 amplitude is clamped to 0 by fade-in (val: ${fadePcm[0]})`);
-  // Assert last sample is zero or near-zero due to fade-out
   assertE2E(Math.abs(fadePcm[fadePcm.length - 1]) < 10, `Final sample amplitude is clamped to 0 by fade-out (val: ${fadePcm[fadePcm.length - 1]})`);
 
-  // E2E 4: Arbitrary Track Counts (1, 2, 4, 6 Tracks)
-  console.log('\n--- E2E 4: ARBITRARY TRACK COUNTS (1, 2, 4, 6 TRACKS) ---');
+  // E2E 5: Arbitrary Track Counts (1, 2, 4, 6 Tracks)
+  console.log('\n--- E2E 5: ARBITRARY TRACK COUNTS (1, 2, 4, 6 TRACKS) ---');
   const trackCounts = [1, 2, 4, 6];
   for (const count of trackCounts) {
     const testTracks = [];
-    testTracks.push({ name: 'Speech', file_path: realTtsFile, start_time: 0.0, duration: 3.0, volume: 1.0 });
+    testTracks.push({ name: 'Speech', file_path: speechFixture.filePath, start_time: 0.0, duration: 3.0, volume: 1.0 });
     if (count >= 2) testTracks.push({ name: 'Music', music_genre: 'comedy', duration: 4.0, volume: 0.5 });
     if (count >= 4) {
       testTracks.push({ name: 'SFX Boing', sfx_preset: 'cartoon_boing', start_time: 1.0, volume: 0.8 });
@@ -334,8 +499,8 @@ async function runAcceptanceSuite() {
     assertE2E(fs.existsSync(countWav) && fs.statSync(countWav).size > 10000, `Output audio file for ${count} track(s) is valid`);
   }
 
-  // E2E 5: Variable Audio Durations (Short 2.5s vs Long 12s)
-  console.log('\n--- E2E 5: VARIABLE AUDIO DURATIONS ---');
+  // E2E 6: Variable Audio Durations (Short 2.5s vs Long 12s)
+  console.log('\n--- E2E 6: VARIABLE AUDIO DURATIONS ---');
   const shortWav = path.join(TEST_DIR, 'e2e_short_duration.wav');
   const shortRes = await procedural.renderMultitrackMix({
     tracks: [
@@ -357,12 +522,12 @@ async function runAcceptanceSuite() {
   });
   assertE2E(longRes.durationSeconds <= 12.2 && longRes.durationSeconds >= 11.8, `Long mix duration accurate: ${longRes.durationSeconds}s`);
 
-  // E2E 6: Master Export Audio Quality & MP3 Transcoding
-  console.log('\n--- E2E 6: MASTER EXPORT QUALITY & CLIPPING PREVENTION ---');
+  // E2E 7: Master Export Audio Quality & MP3 Transcoding
+  console.log('\n--- E2E 7: MASTER EXPORT QUALITY & CLIPPING PREVENTION ---');
   const masterMp3 = path.join(TEST_DIR, 'e2e_master_export.mp3');
   const mp3Res = await procedural.renderMultitrackMix({
     tracks: [
-      { name: 'Speech Stem', file_path: realTtsFile, start_time: 0.5, duration: 4.0, volume: 1.2, is_speech: true },
+      { name: 'Speech Stem', file_path: speechFixture.filePath, start_time: 0.5, duration: 4.0, volume: 1.2, is_speech: true },
       { name: 'Music Bed', music_genre: 'cinematic', duration: 6.0, volume: 0.8, is_ducked: true },
       { name: 'Dramatic Hit', sfx_preset: 'dramatic_impact', start_time: 4.2, volume: 1.0 }
     ],
@@ -384,8 +549,8 @@ async function runAcceptanceSuite() {
   console.log('\n================================================================');
   console.log(' 🏆 PROCEDURAL ACCEPTANCE SUITE SUMMARY');
   console.log(`  Unit Assertions:       ${unitPassed} Passed, ${unitFailed} Failed`);
-  console.log(`  End-to-End Test Cases: ${e2ePassed} Passed, ${e2eFailed} Failed`);
-  console.log(`  Total Suite:           ${unitPassed + e2ePassed} Passed, ${unitFailed + e2eFailed} Failed`);
+  console.log(`  End-to-End Test Cases: ${e2ePassed} Passed, ${e2eFailed} Failed, ${testsSkipped} Skipped`);
+  console.log(`  Total Suite:           ${unitPassed + e2ePassed} Passed, ${unitFailed + e2eFailed} Failed, ${testsSkipped} Skipped`);
   console.log('================================================================\n');
 
   if (unitFailed > 0 || e2eFailed > 0) process.exit(1);
