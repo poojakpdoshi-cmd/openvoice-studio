@@ -1,0 +1,9 @@
+node_modules/
+__pycache__/
+*.pyc
+storage/audio/*
+!storage/audio/.gitkeep
+storage/models/*
+storage/temp*
+.DS_Store
+Thumbs.db

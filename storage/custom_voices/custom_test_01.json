@@ -1,0 +1,15 @@
+{
+  "id": "custom_test_01",
+  "name": "Dr. Jane Miller",
+  "source_language": "en",
+  "gender": "Female",
+  "consent_record": {
+    "confirmed": true,
+    "authorized_by": "Dr. Jane Miller",
+    "timestamp": "2026-11-02T17:30:38.338Z"
+  },
+  "acoustic_features": {
+    "pitch_semitone_bias": 2.5,
+    "sample_rate": 24000
+  }
+}

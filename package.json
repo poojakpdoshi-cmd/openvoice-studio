@@ -1,0 +1,24 @@
+{
+  "name": "openvoice-studio",
+  "version": "1.0.0",
+  "description": "Professional Open-Source AI Voice Generation, Text-to-Speech & Voice Cloning Platform",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "test": "node backend/tests/direct_test.js",
+    "test:unit": "node --test backend/tests/test_engine.js"
+  },
+  "keywords": [
+    "text-to-speech",
+    "tts",
+    "voice-cloning",
+    "ai-voice",
+    "open-source",
+    "kokoro",
+    "piper-tts",
+    "audio-workstation",
+    "speech-synthesis"
+  ],
+  "author": "OpenVoice Studio Contributors",
+  "license": "Apache-2.0"
+}

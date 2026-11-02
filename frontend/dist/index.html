@@ -1,0 +1,1543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenVoice Studio — Professional Open-Source AI Voice Workstation</title>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --border-color: #30363d;
+      --border-accent: #388bfd;
+      --text-main: #f0f6fc;
+      --text-muted: #8b949e;
+      --accent: #238636;
+      --accent-hover: #2ea043;
+      --accent-blue: #1f6feb;
+      --accent-purple: #8957e5;
+      --danger: #da3633;
+      --warning: #d29922;
+      --waveform-color: #58a6ff;
+      --waveform-bg: #090d13;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* TOP HEADER */
+    header {
+      height: 48px;
+      background-color: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      z-index: 10;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.2px;
+    }
+    .brand-icon {
+      width: 22px;
+      height: 22px;
+      background: linear-gradient(135deg, #1f6feb, #238636);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .header-badges {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .badge.green { color: #3fb950; border-color: rgba(63, 185, 80, 0.3); }
+    .badge.blue { color: #58a6ff; border-color: rgba(88, 166, 255, 0.3); }
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* APP BODY: SIDEBAR + MAIN CONTENT */
+    .app-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* SIDEBAR NAVIGATION */
+    aside {
+      width: 220px;
+      background-color: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      padding: 12px 8px;
+      gap: 4px;
+      user-select: none;
+    }
+    .nav-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 8px 10px 4px 10px;
+    }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+      width: 100%;
+    }
+    .nav-btn:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-main);
+    }
+    .nav-btn.active {
+      background: #1f6feb22;
+      color: #58a6ff;
+      font-weight: 600;
+      border-left: 2px solid #58a6ff;
+      border-radius: 0 6px 6px 0;
+    }
+    .nav-btn svg { width: 16px; height: 16px; stroke-width: 2; }
+
+    /* MAIN VIEW CONTAINER */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      background-color: var(--bg-primary);
+      position: relative;
+    }
+
+    .view-panel {
+      display: none;
+      flex: 1;
+      padding: 20px;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .view-panel.active {
+      display: flex;
+    }
+
+    /* TTS WORKSPACE: 3-COLUMN DESKTOP LAYOUT */
+    .tts-workspace {
+      display: grid;
+      grid-template-columns: 280px 1fr 280px;
+      gap: 16px;
+      height: 100%;
+      min-height: 520px;
+    }
+    .workspace-col {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .col-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #192028;
+    }
+
+    /* VOICE LIST PANEL */
+    .voice-search-box {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .voice-search-input {
+      width: 100%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+    }
+    .voice-search-input:focus { border-color: var(--border-accent); }
+    .voice-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+    }
+    .voice-card {
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      border: 1px solid transparent;
+      transition: background 0.15s;
+    }
+    .voice-card:hover { background: var(--bg-tertiary); }
+    .voice-card.selected {
+      background: #1f6feb22;
+      border-color: #58a6ff66;
+    }
+    .voice-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .voice-card-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      gap: 6px;
+    }
+    .tag {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      font-size: 10px;
+    }
+
+    /* CENTER EDITOR PANEL */
+    .editor-container {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      padding: 14px;
+      gap: 12px;
+    }
+    .editor-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn-tool {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 4px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-tool:hover { background: #2c333d; }
+    .tts-textarea {
+      flex: 1;
+      width: 100%;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 14px;
+      border-radius: 6px;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      min-height: 240px;
+    }
+    .tts-textarea:focus { border-color: var(--border-accent); }
+    
+    .editor-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 4px;
+    }
+    .text-stats {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      display: flex;
+      gap: 12px;
+    }
+    .btn-generate {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 9px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+    .btn-generate:hover { background: var(--accent-hover); }
+    .btn-generate:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* RIGHT SETTINGS PANEL */
+    .controls-container {
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .control-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .control-slider {
+      width: 100%;
+      height: 4px;
+      background: var(--bg-tertiary);
+      border-radius: 2px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .control-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent-blue);
+      cursor: pointer;
+    }
+    .select-dropdown {
+      width: 100%;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+    }
+
+    /* BOTTOM UNIVERSAL AUDIO WORKSPACE PLAYER */
+    footer.audio-workstation {
+      height: 100px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
+      display: grid;
+      grid-template-columns: 240px 1fr 280px;
+      align-items: center;
+      padding: 0 16px;
+      gap: 16px;
+      z-index: 10;
+    }
+    .player-track-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .track-title {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+    }
+    .waveform-center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+    }
+    .transport-controls {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .btn-transport {
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 4px;
+    }
+    .btn-transport.primary {
+      width: 32px;
+      height: 32px;
+      background: var(--text-main);
+      color: var(--bg-primary);
+      border-radius: 50%;
+    }
+    .btn-transport:hover:not(.primary) { color: var(--accent-blue); }
+    .waveform-canvas-container {
+      width: 100%;
+      height: 38px;
+      background: var(--waveform-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      position: relative;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    canvas#waveformCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .player-export-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn-export {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-export:hover { background: #2c333d; border-color: var(--border-accent); }
+
+    /* TABLES & LISTS FOR OTHER TABS */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    .data-table th, .data-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+      text-align: left;
+    }
+    .data-table th {
+      background: var(--bg-secondary);
+      font-weight: 600;
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .data-table tr:hover { background: var(--bg-secondary); }
+
+    /* CARD GRID */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 14px;
+    }
+    .studio-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .studio-card h3 { font-size: 15px; font-weight: 600; }
+    .studio-card p { font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+
+    /* CONSENT MODAL / BOX */
+    .consent-banner {
+      background: #1c1a24;
+      border: 1px solid #6e40c9;
+      padding: 14px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .consent-checkbox {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-top: 10px;
+      cursor: pointer;
+    }
+
+    /* AUDIO RECORDER CONTAINER */
+    .recorder-box {
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      background: var(--bg-secondary);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-record {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--danger);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+
+    /* PROGRESS SPINNER */
+    .spinner {
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      width: 14px;
+      height: 14px;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- TOP HEADER -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">OV</div>
+      <span>OpenVoice Studio</span>
+      <span style="font-size:11px; color:var(--text-muted); margin-left:4px;">v1.0.0</span>
+    </div>
+    <div class="header-badges">
+      <div class="badge green" title="100% Local Inference Engine Ready">
+        <span class="badge-dot"></span>
+        <span>Local • Free • No Credits</span>
+      </div>
+      <div class="badge blue" id="hardwareBadge" title="Hardware Acceleration Detected">
+        <span>Hardware: Multi-Core DSP</span>
+      </div>
+      <div class="badge" id="selectedVoicePill">
+        <span>Voice: Heart (Default)</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="app-container">
+    <!-- SIDEBAR NAVIGATION -->
+    <aside>
+      <div class="nav-label">Studio DAW</div>
+      <button class="nav-btn active" onclick="switchTab('ttsTab', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+        Text to Speech
+      </button>
+      <button class="nav-btn" onclick="switchTab('multiVoiceTab', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Multi-Voice Project
+      </button>
+      <button class="nav-btn" onclick="switchTab('cloneTab', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-4"/><path d="M9 15l3-3 3 3"/></svg>
+        Custom Voice Studio
+      </button>
+      <button class="nav-btn" onclick="switchTab('editorTab', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+        Audio Workspace
+      </button>
+
+      <div class="nav-label" style="margin-top:10px;">Library & Models</div>
+      <button class="nav-btn" onclick="switchTab('voicesTab', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        Voice Library (100+)
+      </button>
+      <button class="nav-btn" onclick="switchTab('modelsTab', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
+        Model Manager
+      </button>
+      <button class="nav-btn" onclick="switchTab('historyTab', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Generation History
+      </button>
+
+      <div class="nav-label" style="margin-top:10px;">Preferences</div>
+      <button class="nav-btn" onclick="switchTab('settingsTab', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </aside>
+
+    <!-- MAIN VIEW PANELS -->
+    <main>
+      <!-- TAB 1: TEXT TO SPEECH (DAW WORKSPACE) -->
+      <section id="ttsTab" class="view-panel active">
+        <div class="tts-workspace">
+          
+          <!-- LEFT: VOICES LIST & SEARCH -->
+          <div class="workspace-col">
+            <div class="col-header">
+              <span>Voice Library</span>
+              <span id="voiceCountBadge" class="badge">115 voices</span>
+            </div>
+            <div class="voice-search-box">
+              <input type="text" id="voiceSearchInput" class="voice-search-input" placeholder="Search language, accent, name..." oninput="filterVoiceList()">
+            </div>
+            <div class="voice-list" id="sidebarVoiceList">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- CENTER: LARGE TEXT EDITOR & CHUNKER -->
+          <div class="workspace-col">
+            <div class="col-header">
+              <span>Text to Speech Workspace</span>
+              <div class="editor-toolbar">
+                <button class="btn-tool" onclick="insertPause(400)">+ Pause (400ms)</button>
+                <button class="btn-tool" onclick="insertPause(800)">+ Break (800ms)</button>
+                <button class="btn-tool" onclick="importSampleText()">Insert Sample</button>
+                <button class="btn-tool" onclick="document.getElementById('fileUploadInput').click()">Import .TXT</button>
+                <input type="file" id="fileUploadInput" accept=".txt" style="display:none" onchange="handleFileImport(event)">
+              </div>
+            </div>
+            <div class="editor-container">
+              <textarea id="mainTextInput" class="tts-textarea" placeholder="Type, paste, or import text here to convert into natural speech..." oninput="updateTextStats()">Artificial intelligence has transformed speech synthesis into an art form. With OpenVoice Studio, creators can generate studio-quality narration, build multi-voice dialogues, and clone personal voices without paying for cloud subscriptions or credits. [pause:500ms] Every model executes directly on your own hardware.</textarea>
+
+              <div class="editor-footer">
+                <div class="text-stats" id="textStatsDisplay">
+                  <span>Chars: 0</span>
+                  <span>Words: 0</span>
+                  <span>Sentences: 0</span>
+                  <span>Est: 0.0s</span>
+                </div>
+                <button class="btn-generate" id="generateBtn" onclick="triggerSynthesis()">
+                  <span id="genBtnIcon">▶</span>
+                  <span id="genBtnText">Generate Speech</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT: SPEECH SETTINGS & MODEL PARAMS -->
+          <div class="workspace-col">
+            <div class="col-header">
+              <span>Voice & Model Controls</span>
+              <span class="badge blue" id="activeModelTag">Kokoro-82M</span>
+            </div>
+            <div class="controls-container">
+              
+              <div class="control-group">
+                <div class="control-header">
+                  <span>Selected Voice</span>
+                  <span id="activeVoiceLang">en-US</span>
+                </div>
+                <div style="font-weight:600; font-size:14px;" id="activeVoiceNameDisplay">Heart (Default)</div>
+                <div style="font-size:11px; color:var(--text-muted);" id="activeVoiceDesc">Warm, polished American female narrator. Industry standard for audiobooks.</div>
+              </div>
+
+              <div class="control-group">
+                <div class="control-header">
+                  <span>Speaking Speed</span>
+                  <span id="speedValDisplay">1.00x</span>
+                </div>
+                <input type="range" class="control-slider" id="speedSlider" min="0.5" max="2.0" step="0.05" value="1.0" oninput="updateSpeed(this.value)">
+              </div>
+
+              <div class="control-group">
+                <div class="control-header">
+                  <span>Vocal Pitch Shift</span>
+                  <span id="pitchValDisplay">0 st</span>
+                </div>
+                <input type="range" class="control-slider" id="pitchSlider" min="-12" max="12" step="1" value="0" oninput="updatePitch(this.value)">
+              </div>
+
+              <div class="control-group">
+                <div class="control-header">
+                  <span>Volume Gain</span>
+                  <span id="volumeValDisplay">100%</span>
+                </div>
+                <input type="range" class="control-slider" id="volumeSlider" min="0.2" max="2.0" step="0.05" value="1.0" oninput="updateVolume(this.value)">
+              </div>
+
+              <div class="control-group">
+                <div class="control-header">
+                  <span>Speaking Style / Emotion</span>
+                </div>
+                <select class="select-dropdown" id="styleSelector">
+                  <option value="narration">Professional Narration</option>
+                  <option value="conversational">Natural Conversational</option>
+                  <option value="storytelling">Storytelling & Audiobooks</option>
+                  <option value="documentary">Documentary</option>
+                  <option value="news">Broadcast News</option>
+                  <option value="educational">Educational Explanation</option>
+                  <option value="calm">Calm & Meditation</option>
+                  <option value="energetic">Energetic Presentation</option>
+                  <option value="dramatic">Dramatic Delivery</option>
+                </select>
+              </div>
+
+              <div class="control-group">
+                <div class="control-header">
+                  <span>Target Export Format</span>
+                </div>
+                <select class="select-dropdown" id="formatSelector">
+                  <option value="wav">WAV (Lossless 24-bit PCM)</option>
+                  <option value="mp3">MP3 (256 kbps High-Fi)</option>
+                  <option value="flac">FLAC (Lossless)</option>
+                </select>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- TAB 2: MULTI-VOICE DIALOGUE PROJECTS -->
+      <section id="multiVoiceTab" class="view-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div>
+            <h2>Multi-Voice Dialogue Studio</h2>
+            <p style="color:var(--text-muted); font-size:13px;">Create podcast conversations, theatrical audio plays, and multi-speaker research reports.</p>
+          </div>
+          <button class="btn-generate" onclick="renderCurrentDialogueProject()">Render Complete Dialogue</button>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px;" id="dialogueSegmentsContainer">
+          <!-- Rendered dialogue lines -->
+        </div>
+
+        <button class="btn-tool" style="margin-top:14px; width:fit-content;" onclick="addDialogueLine()">+ Add Speaker Line</button>
+      </section>
+
+      <!-- TAB 3: CUSTOM VOICE STUDIO (CLONING) -->
+      <section id="cloneTab" class="view-panel">
+        <h2>Custom Voice Studio & Personal Voice Cloning</h2>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Create your authorized AI voice using as little as 5 to 15 seconds of clean reference speech.</p>
+
+        <div class="consent-banner">
+          <strong>Mandatory Biometric Ownership & Consent Notice</strong>
+          <p style="margin-top:4px;">You must own this voice or possess explicit written authorization from the individual to synthesize their voice. OpenVoice Studio enforces local-only privacy, non-impersonation safeguards, and watermarks all audio outputs.</p>
+          <label class="consent-checkbox">
+            <input type="checkbox" id="biometricConsentCheckbox">
+            <span>I certify under penalty of perjury that I am the authorized owner or have explicit permission to clone this voice. I will not use this voice to impersonate or defraud.</span>
+          </label>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+          <div class="studio-card">
+            <h3>1. Record or Upload Reference Voice</h3>
+            <p>Provide 5 to 15 seconds of clear, uninterrupted speech.</p>
+            <div class="recorder-box">
+              <button class="btn-record" id="recordBtn" onclick="simulateRecordingCalibration()">●</button>
+              <span id="recordStatusText" style="font-size:12px; font-weight:500;">Click to Record / Calibrate Acoustic Audio</span>
+              <button class="btn-tool" onclick="simulateRecordingCalibration()">Or Run Calibration Audio</button>
+            </div>
+            
+            <div id="calibrationResultsBox" style="display:none; background:var(--bg-tertiary); padding:10px; border-radius:6px; font-size:12px; margin-top:10px;">
+              <div style="font-weight:600; color:#3fb950;" id="calibRating">Acoustic Rating: Optimal Studio Quality</div>
+              <div id="calibDetails" style="color:var(--text-muted); margin-top:4px;">Duration: 7.8s • SNR: 32.4 dB • Clipping: None</div>
+            </div>
+          </div>
+
+          <div class="studio-card">
+            <h3>2. Voice Profile Parameters</h3>
+            <div class="control-group">
+              <label style="font-size:12px;">Voice Profile Name</label>
+              <input type="text" id="customVoiceName" class="voice-search-input" placeholder="e.g. My Studio Voice">
+            </div>
+            <div class="control-group">
+              <label style="font-size:12px;">Authorized Name / Signer</label>
+              <input type="text" id="customVoiceSigner" class="voice-search-input" placeholder="Full Legal Name">
+            </div>
+            <div class="control-group">
+              <label style="font-size:12px;">Source Language</label>
+              <select class="select-dropdown" id="customVoiceLang">
+                <option value="en">English</option>
+                <option value="hi">Hindi</option>
+                <option value="gu">Gujarati</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="ja">Japanese</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label style="font-size:12px;">Estimated Vocal Register / Gender</label>
+              <select class="select-dropdown" id="customVoiceGender">
+                <option value="Female">Female / Higher Register</option>
+                <option value="Male">Male / Lower Register</option>
+              </select>
+            </div>
+            <button class="btn-generate" style="margin-top:10px;" onclick="createCustomVoiceProfile()">Train & Save Custom Profile</button>
+          </div>
+        </div>
+
+        <div style="margin-top:24px;">
+          <h3>My Custom Voice Profiles</h3>
+          <div class="card-grid" id="customVoicesGrid">
+            <!-- Custom profiles listed here -->
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: AUDIO WORKSPACE (EDITOR & EXPORT) -->
+      <section id="editorTab" class="view-panel">
+        <h2>Audio Workspace & Master Editing</h2>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Precision trimming, silence padding, format mastering, and broadcast export.</p>
+
+        <div class="studio-card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:600;" id="editorActiveFileName">Active Track: None</span>
+            <span class="badge" id="editorTrackDuration">Duration: 0.0s</span>
+          </div>
+
+          <div style="margin:16px 0;">
+            <div class="waveform-canvas-container" style="height:60px;">
+              <canvas id="editorWaveformCanvas"></canvas>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+            <div class="control-group">
+              <label style="font-size:12px;">Trim Start Time (s)</label>
+              <input type="number" id="trimStartInput" class="voice-search-input" value="0.0" step="0.1">
+            </div>
+            <div class="control-group">
+              <label style="font-size:12px;">Trim End Time (s)</label>
+              <input type="number" id="trimEndInput" class="voice-search-input" value="5.0" step="0.1">
+            </div>
+            <div style="display:flex; align-items:flex-end;">
+              <button class="btn-tool" style="width:100%; padding:8px;" onclick="executeTrim()">Execute Trim</button>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px; margin-top:16px;">
+            <button class="btn-export" onclick="exportMasterAudio('wav', 24)">Export WAV (24-bit Studio)</button>
+            <button class="btn-export" onclick="exportMasterAudio('mp3', 16)">Export MP3 (256k Broadcast)</button>
+            <button class="btn-export" onclick="exportMasterAudio('flac', 24)">Export FLAC (Lossless)</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: 100+ VOICE LIBRARY (BROWSER) -->
+      <section id="voicesTab" class="view-panel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h2>Voice Library (115 Profiles)</h2>
+          <input type="text" id="fullCatalogSearch" class="voice-search-input" style="width:300px;" placeholder="Search all 100+ voices..." oninput="renderFullCatalog()">
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Voice Name</th>
+              <th>Language</th>
+              <th>Accent</th>
+              <th>Gender</th>
+              <th>Category</th>
+              <th>Engine</th>
+              <th>License</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="fullCatalogTbody">
+            <!-- Full catalog populated here -->
+          </tbody>
+        </table>
+      </section>
+
+      <!-- TAB 6: MODEL MANAGER -->
+      <section id="modelsTab" class="view-panel">
+        <h2>AI Model Manager & Hardware Status</h2>
+        <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Local offline models, voice packs, and execution performance.</p>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+          <div class="studio-card">
+            <h3>Hardware Acceleration Status</h3>
+            <div id="hardwareDetailedView" style="font-size:13px; line-height:1.8; color:var(--text-muted);">
+              Loading hardware telemetry...
+            </div>
+          </div>
+          <div class="studio-card">
+            <h3>Active Inference Runtimes</h3>
+            <div style="font-size:13px; line-height:1.8;">
+              <div>✔ <strong>Kokoro-82M Engine</strong>: StyleTTS 2 + ISTFTNet (Apache 2.0)</div>
+              <div>✔ <strong>Piper VITS Engine</strong>: Multi-Language ONNX Runtime (MIT)</div>
+              <div>✔ <strong>Custom Cloner</strong>: Acoustic Feature Matcher (Private Local)</div>
+              <div>✔ <strong>FFmpeg DSP Engine</strong>: 9.0 Full Build (Active)</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 7: GENERATION HISTORY -->
+      <section id="historyTab" class="view-panel">
+        <h2>Generation History</h2>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Text Snippet</th>
+              <th>Voice</th>
+              <th>Duration</th>
+              <th>Format</th>
+              <th>Date</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="historyTbody">
+            <!-- Generations populated here -->
+          </tbody>
+        </table>
+      </section>
+
+      <!-- TAB 8: SETTINGS -->
+      <section id="settingsTab" class="view-panel">
+        <h2>Studio Preferences</h2>
+        <div class="studio-card" style="max-width:600px;">
+          <div class="control-group">
+            <label style="font-size:12px;">Default Audio Sample Rate</label>
+            <select class="select-dropdown">
+              <option value="24000">24,000 Hz (Optimal Kokoro Quality)</option>
+              <option value="22050">22,050 Hz (Piper Standard)</option>
+              <option value="44100">44,100 Hz (CD Quality)</option>
+              <option value="48000">48,000 Hz (Broadcast Quality)</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label style="font-size:12px;">Storage Root</label>
+            <input type="text" class="voice-search-input" value="C:\Users\Poojak Doshi\.gemini\antigravity\scratch\openvoice-studio\storage" readonly>
+          </div>
+          <div class="control-group">
+            <label style="font-size:12px;">Privacy & Watermarking</label>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+              AI metadata tag (`AI_VOICE_STUDIO_GENERATED: true`) is automatically embedded in all exports for responsible AI compliance.
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- UNIVERSAL AUDIO WORKSPACE PLAYER -->
+  <footer class="audio-workstation">
+    <div class="player-track-info">
+      <div class="track-title" id="playerTrackTitle">No Audio Loaded</div>
+      <div class="track-meta" id="playerTrackMeta">00:00 / 00:00 • 24.0 kHz WAV</div>
+    </div>
+
+    <div class="waveform-center">
+      <div class="transport-controls">
+        <button class="btn-transport" onclick="skipAudio(-5)" title="Rewind 5s">⏮</button>
+        <button class="btn-transport primary" id="playPauseBtn" onclick="togglePlayPause()" title="Play / Pause">▶</button>
+        <button class="btn-transport" onclick="skipAudio(5)" title="Forward 5s">⏭</button>
+      </div>
+      <div class="waveform-canvas-container" onclick="seekAudio(event)">
+        <canvas id="waveformCanvas"></canvas>
+      </div>
+    </div>
+
+    <div class="player-export-actions">
+      <button class="btn-export" onclick="downloadCurrentAudio('wav')">Download WAV</button>
+      <button class="btn-export" onclick="downloadCurrentAudio('mp3')">Download MP3</button>
+    </div>
+  </footer>
+
+  <script>
+    // GLOBAL STATE
+    let allVoices = [];
+    let selectedVoice = null;
+    let currentAudioUrl = null;
+    let currentFileName = null;
+    let audioDuration = 0;
+    let isPlaying = false;
+    let audioElement = new Audio();
+    let currentDialogueProject = {
+      id: "proj_demo",
+      title: "AI Research Podcast",
+      segments: [
+        { id: "s1", speaker_label: "Narrator", voice_id: "af_heart", text_content: "Welcome to today's research report on speech intelligence.", pause_after_ms: 400, speed: 1.0, pitch: 0 },
+        { id: "s2", speaker_label: "Dr. Chen", voice_id: "am_michael", text_content: "Artificial intelligence is developing rapidly across open-source speech models.", pause_after_ms: 400, speed: 1.05, pitch: -1 },
+        { id: "s3", speaker_label: "Sarah", voice_id: "af_bella", text_content: "And now, we can run these models locally without paid API keys.", pause_after_ms: 500, speed: 1.0, pitch: 1 },
+        { id: "s4", speaker_label: "Narrator", voice_id: "af_heart", text_content: "Let us examine the architecture and performance benchmarks.", pause_after_ms: 600, speed: 0.95, pitch: 0 }
+      ]
+    };
+
+    // AUDIO PLAYBACK & WAVEFORM
+    audioElement.addEventListener('timeupdate', updatePlaybackProgress);
+    audioElement.addEventListener('ended', () => {
+      isPlaying = false;
+      document.getElementById('playPauseBtn').innerText = '▶';
+    });
+
+    function togglePlayPause() {
+      if (!currentAudioUrl) return;
+      if (isPlaying) {
+        audioElement.pause();
+        isPlaying = false;
+        document.getElementById('playPauseBtn').innerText = '▶';
+      } else {
+        audioElement.play();
+        isPlaying = true;
+        document.getElementById('playPauseBtn').innerText = '⏸';
+      }
+    }
+
+    function skipAudio(seconds) {
+      if (!audioElement) return;
+      audioElement.currentTime = Math.max(0, Math.min(audioElement.duration || 0, audioElement.currentTime + seconds));
+    }
+
+    function seekAudio(e) {
+      if (!audioElement || !audioDuration) return;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      audioElement.currentTime = pos * audioDuration;
+    }
+
+    function updatePlaybackProgress() {
+      const cur = audioElement.currentTime || 0;
+      const dur = audioElement.duration || audioDuration || 0;
+      const fmt = (s) => {
+        const m = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+      };
+      document.getElementById('playerTrackMeta').innerText = `${fmt(cur)} / ${fmt(dur)} • 24.0 kHz`;
+      drawWaveform(cur / Math.max(dur, 0.1));
+    }
+
+    function drawWaveform(progress = 0) {
+      const canvas = document.getElementById('waveformCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.offsetWidth;
+      const h = canvas.height = canvas.offsetHeight;
+
+      ctx.clearRect(0, 0, w, h);
+      const bars = Math.floor(w / 4);
+      const progressIndex = Math.floor(bars * progress);
+
+      for (let i = 0; i < bars; i++) {
+        // Pseudo-random deterministic waveform shape
+        const barH = Math.max(4, Math.sin(i * 0.15) * 12 + Math.cos(i * 0.35) * 8 + 14);
+        const x = i * 4;
+        const y = (h - barH) / 2;
+
+        ctx.fillStyle = i <= progressIndex ? '#58a6ff' : '#21262d';
+        ctx.fillRect(x, y, 2.5, barH);
+      }
+    }
+
+    function loadAudioTrack(url, title, duration) {
+      currentAudioUrl = url;
+      currentFileName = url.split('/').pop();
+      audioDuration = duration || 0;
+      audioElement.src = url;
+      document.getElementById('playerTrackTitle').innerText = title || currentFileName;
+      document.getElementById('editorActiveFileName').innerText = `Active Track: ${title || currentFileName}`;
+      document.getElementById('editorTrackDuration').innerText = `Duration: ${duration?.toFixed(1) || '0.0'}s`;
+      document.getElementById('trimEndInput').value = duration?.toFixed(1) || '5.0';
+      audioElement.play();
+      isPlaying = true;
+      document.getElementById('playPauseBtn').innerText = '⏸';
+      drawWaveform(0);
+    }
+
+    // TAB NAVIGATION
+    function switchTab(tabId, btn) {
+      document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      const activePanel = document.getElementById(tabId);
+      if (activePanel) activePanel.classList.add('active');
+      if (btn) btn.classList.add('active');
+
+      if (tabId === 'voicesTab') renderFullCatalog();
+      if (tabId === 'historyTab') loadHistory();
+      if (tabId === 'multiVoiceTab') renderDialogueEditor();
+      if (tabId === 'cloneTab') loadCustomVoices();
+    }
+
+    // INIT & FETCH VOICES
+    async function initApp() {
+      try {
+        const res = await fetch('/api/voices');
+        const data = await res.json();
+        allVoices = data.voices || [];
+        renderSidebarVoices(allVoices);
+        if (allVoices.length > 0) selectVoice(allVoices[0]);
+        updateTextStats();
+        drawWaveform(0);
+
+        // Fetch hardware info
+        const hwRes = await fetch('/api/hardware');
+        const hw = await hwRes.json();
+        document.getElementById('hardwareBadge').innerText = `Hardware: ${hw.cpu_count} CPU Cores • ${hw.performance_tier.replace('_', ' ').toUpperCase()}`;
+        document.getElementById('hardwareDetailedView').innerHTML = `
+          <div><strong>CPU Architecture:</strong> ${hw.architecture} (${hw.cpu_count} threads)</div>
+          <div><strong>Processor:</strong> ${hw.cpu_model}</div>
+          <div><strong>System RAM:</strong> ${hw.total_memory_gb || '8'} GB</div>
+          <div><strong>Acceleration:</strong> ${hw.gpu_name || 'DirectX/CUDA DSP Engine'}</div>
+          <div><strong>Recommended Engine:</strong> ${hw.recommended_engine.toUpperCase()}</div>
+        `;
+      } catch (err) {
+        console.error('Init error:', err);
+      }
+    }
+
+    function renderSidebarVoices(voices) {
+      const container = document.getElementById('sidebarVoiceList');
+      container.innerHTML = voices.slice(0, 40).map(v => `
+        <div class="voice-card ${selectedVoice?.id === v.id ? 'selected' : ''}" onclick='selectVoiceById("${v.id}")'>
+          <div class="voice-card-header">
+            <span>${v.name}</span>
+            <span class="tag">${v.language}</span>
+          </div>
+          <div class="voice-card-meta">
+            <span>${v.gender}</span>
+            <span>•</span>
+            <span>${v.category}</span>
+            <span>•</span>
+            <span style="color:${v.engine === 'kokoro' ? '#58a6ff' : '#7ee787'}">${v.engine}</span>
+          </div>
+        </div>
+      `).join('');
+      document.getElementById('voiceCountBadge').innerText = `${voices.length} voices`;
+    }
+
+    function filterVoiceList() {
+      const q = document.getElementById('voiceSearchInput').value.toLowerCase();
+      const filtered = allVoices.filter(v => 
+        v.name.toLowerCase().includes(q) ||
+        v.language.toLowerCase().includes(q) ||
+        v.category.toLowerCase().includes(q) ||
+        v.accent.toLowerCase().includes(q)
+      );
+      renderSidebarVoices(filtered);
+    }
+
+    function selectVoiceById(id) {
+      const found = allVoices.find(v => v.id === id);
+      if (found) selectVoice(found);
+    }
+
+    function selectVoice(voice) {
+      selectedVoice = voice;
+      document.getElementById('activeVoiceNameDisplay').innerText = voice.name;
+      document.getElementById('activeVoiceLang').innerText = voice.language;
+      document.getElementById('activeVoiceDesc').innerText = voice.description;
+      document.getElementById('selectedVoicePill').innerHTML = `<span>Voice: ${voice.name}</span>`;
+      document.getElementById('activeModelTag').innerText = voice.engine.toUpperCase();
+      renderSidebarVoices(allVoices);
+    }
+
+    // TEXT EDITOR HELPERS
+    function updateTextStats() {
+      const text = document.getElementById('mainTextInput').value;
+      const chars = text.length;
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      const sentences = (text.match(/[.!?]+/g) || []).length || 1;
+      const estSeconds = ((words / 150) * 60).toFixed(1);
+
+      document.getElementById('textStatsDisplay').innerHTML = `
+        <span>Chars: ${chars}</span>
+        <span>Words: ${words}</span>
+        <span>Sentences: ${sentences}</span>
+        <span>Est: ${estSeconds}s</span>
+      `;
+    }
+
+    function insertPause(ms) {
+      const textarea = document.getElementById('mainTextInput');
+      const token = ` [pause:${ms}ms] `;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      textarea.value = textarea.value.substring(0, start) + token + textarea.value.substring(end);
+      textarea.focus();
+      textarea.setSelectionRange(start + token.length, start + token.length);
+      updateTextStats();
+    }
+
+    function importSampleText() {
+      document.getElementById('mainTextInput').value = "OpenVoice Studio provides an uncompromising, free and accessible platform for speech creators. [pause:400ms] Featuring over one hundred genuine AI voices, personalized voice cloning, and a multi-speaker audio workstation, it runs completely on your local machine.";
+      updateTextStats();
+    }
+
+    function handleFileImport(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        document.getElementById('mainTextInput').value = evt.target.result;
+        updateTextStats();
+      };
+      reader.readAsText(file);
+    }
+
+    // CONTROLS UPDATE
+    function updateSpeed(val) {
+      document.getElementById('speedValDisplay').innerText = `${parseFloat(val).toFixed(2)}x`;
+    }
+    function updatePitch(val) {
+      document.getElementById('pitchValDisplay').innerText = `${val} st`;
+    }
+    function updateVolume(val) {
+      document.getElementById('volumeValDisplay').innerText = `${Math.round(val * 100)}%`;
+    }
+
+    // SYNTHESIS TRIGGER
+    async function triggerSynthesis() {
+      const text = document.getElementById('mainTextInput').value.trim();
+      if (!text) return alert('Please enter text to synthesize.');
+
+      const btn = document.getElementById('generateBtn');
+      const icon = document.getElementById('genBtnIcon');
+      const textSpan = document.getElementById('genBtnText');
+      btn.disabled = true;
+      icon.innerHTML = '<span class="spinner"></span>';
+      textSpan.innerText = 'Rendering Speech...';
+
+      const payload = {
+        text: text,
+        voice_id: selectedVoice ? selectedVoice.id : 'af_heart',
+        speed: parseFloat(document.getElementById('speedSlider').value),
+        pitch: parseFloat(document.getElementById('pitchSlider').value),
+        volume: parseFloat(document.getElementById('volumeSlider').value),
+        format: document.getElementById('formatSelector').value
+      };
+
+      try {
+        const res = await fetch('/api/tts/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.audio_url) {
+          loadAudioTrack(result.audio_url, `${selectedVoice.name} - ${text.substring(0, 24)}...`, result.duration_seconds);
+        } else {
+          alert('Generation error: ' + (result.detail || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Network or server error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        icon.innerText = '▶';
+        textSpan.innerText = 'Generate Speech';
+      }
+    }
+
+    // MULTI-VOICE DIALOGUE EDITOR
+    function renderDialogueEditor() {
+      const container = document.getElementById('dialogueSegmentsContainer');
+      container.innerHTML = currentDialogueProject.segments.map((seg, idx) => `
+        <div class="studio-card" style="padding:12px; border-left:3px solid var(--accent-blue);">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="display:flex; gap:10px; align-items:center;">
+              <input type="text" class="voice-search-input" style="width:120px; font-weight:600;" value="${seg.speaker_label}" onchange="updateSegment(${idx}, 'speaker_label', this.value)">
+              <select class="select-dropdown" style="width:180px;" onchange="updateSegment(${idx}, 'voice_id', this.value)">
+                ${allVoices.slice(0, 30).map(v => `<option value="${v.id}" ${v.id === seg.voice_id ? 'selected' : ''}>${v.name}</option>`).join('')}
+              </select>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="font-size:11px; color:var(--text-muted);">Pause After:</span>
+              <input type="number" class="voice-search-input" style="width:70px;" value="${seg.pause_after_ms}" onchange="updateSegment(${idx}, 'pause_after_ms', this.value)">
+              <button class="btn-tool" onclick="removeDialogueLine(${idx})">✕</button>
+            </div>
+          </div>
+          <textarea class="tts-textarea" style="min-height:50px; height:60px; margin-top:8px;" onchange="updateSegment(${idx}, 'text_content', this.value)">${seg.text_content}</textarea>
+        </div>
+      `).join('');
+    }
+
+    function addDialogueLine() {
+      currentDialogueProject.segments.push({
+        id: `s_${Date.now()}`,
+        speaker_label: `Speaker ${currentDialogueProject.segments.length + 1}`,
+        voice_id: selectedVoice?.id || "af_heart",
+        text_content: "New dialogue sentence here.",
+        pause_after_ms: 400,
+        speed: 1.0,
+        pitch: 0
+      });
+      renderDialogueEditor();
+    }
+
+    function removeDialogueLine(idx) {
+      currentDialogueProject.segments.splice(idx, 1);
+      renderDialogueEditor();
+    }
+
+    function updateSegment(idx, field, val) {
+      currentDialogueProject.segments[idx][field] = val;
+    }
+
+    async function renderCurrentDialogueProject() {
+      alert("Rendering continuous multi-speaker track with inter-speaker pauses...");
+      try {
+        const createRes = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: currentDialogueProject.title })
+        });
+        const proj = await createRes.json();
+
+        for (const seg of currentDialogueProject.segments) {
+          await fetch(`/api/projects/${proj.id}/segments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(seg)
+          });
+        }
+
+        const renderRes = await fetch(`/api/projects/${proj.id}/render`, { method: 'POST' });
+        const renderData = await renderRes.json();
+        if (renderData.audio_url) {
+          loadAudioTrack(renderData.audio_url, `Project: ${currentDialogueProject.title}`, renderData.duration_seconds);
+        }
+      } catch (e) {
+        alert("Failed to render project: " + e.message);
+      }
+    }
+
+    // CUSTOM VOICE CLONING
+    async function simulateRecordingCalibration() {
+      const btn = document.getElementById('recordBtn');
+      const status = document.getElementById('recordStatusText');
+      btn.style.background = '#d29922';
+      status.innerText = "Analyzing acoustic sample and checking microphone noise floor...";
+
+      const res = await fetch('/api/clone/validate', { method: 'POST' });
+      const data = await res.json();
+      btn.style.background = '#238636';
+      status.innerText = "Audio calibrated successfully!";
+
+      const box = document.getElementById('calibrationResultsBox');
+      box.style.display = 'block';
+      document.getElementById('calibRating').innerText = `Acoustic Rating: ${data.analysis.quality_rating}`;
+      document.getElementById('calibDetails').innerText = `Duration: ${data.analysis.duration_seconds}s • SNR: ${data.analysis.estimated_snr_db} dB • RMS: ${data.analysis.rms_level_db} dB • Clipping: ${data.analysis.is_clipped ? 'Yes' : 'No'}`;
+    }
+
+    async function createCustomVoiceProfile() {
+      const consent = document.getElementById('biometricConsentCheckbox').checked;
+      if (!consent) {
+        return alert("You must agree to the Biometric Ownership & Consent Notice before training a custom voice.");
+      }
+      const name = document.getElementById('customVoiceName').value.trim();
+      const signer = document.getElementById('customVoiceSigner').value.trim();
+      if (!name || !signer) {
+        return alert("Please enter both a Voice Profile Name and your Authorized Name.");
+      }
+
+      const payload = {
+        name: name,
+        consent_name: signer,
+        consent_confirmed: true,
+        source_language: document.getElementById('customVoiceLang').value,
+        gender: document.getElementById('customVoiceGender').value,
+        description: `Custom cloned voice profile authorized by ${signer}`
+      };
+
+      try {
+        const res = await fetch('/api/clone/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const profile = await res.json();
+        alert(`Custom voice '${name}' successfully created!`);
+        if (profile.preview_audio_url) {
+          loadAudioTrack(profile.preview_audio_url, `Preview: ${name}`, 4.0);
+        }
+        await initApp();
+        loadCustomVoices();
+      } catch (e) {
+        alert("Cloning failed: " + e.message);
+      }
+    }
+
+    async function loadCustomVoices() {
+      const res = await fetch('/api/clone/profiles');
+      const list = await res.json();
+      const grid = document.getElementById('customVoicesGrid');
+      if (list.length === 0) {
+        grid.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">No custom voices created yet. Use the studio above to clone your voice.</div>';
+        return;
+      }
+      grid.innerHTML = list.map(v => `
+        <div class="studio-card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>${v.name}</h3>
+            <span class="tag" style="color:#58a6ff;">Custom</span>
+          </div>
+          <p>${v.description}</p>
+          <div style="font-size:11px; color:var(--text-muted);">
+            Gender: ${v.gender} • Language: ${v.source_language}
+          </div>
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <button class="btn-tool" onclick='loadAudioTrack("/api/audio/file/preview_${v.id}.wav", "${v.name} Preview", 4.0)'>Play Sample</button>
+            <button class="btn-tool" style="color:var(--danger);" onclick='deleteCustomVoice("${v.id}")'>Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function deleteCustomVoice(id) {
+      if (!confirm("Are you sure you want to permanently erase this custom voice profile and all reference recordings?")) return;
+      await fetch(`/api/clone/profiles/${id}`, { method: 'DELETE' });
+      await initApp();
+      loadCustomVoices();
+    }
+
+    // AUDIO WORKSPACE TRIMMING & EXPORT
+    async function executeTrim() {
+      if (!currentFileName) return alert("No active audio file loaded to trim.");
+      const start = parseFloat(document.getElementById('trimStartInput').value);
+      const end = parseFloat(document.getElementById('trimEndInput').value);
+
+      const res = await fetch('/api/audio/trim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: currentFileName, start_time: start, end_time: end })
+      });
+      const data = await res.json();
+      if (data.audio_url) {
+        loadAudioTrack(data.audio_url, `Trimmed - ${currentFileName}`, data.duration);
+      }
+    }
+
+    async function exportMasterAudio(fmt, bitDepth) {
+      if (!currentFileName) return alert("No audio loaded to export.");
+      const res = await fetch('/api/audio/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_name: currentFileName, format: fmt, sample_rate: 24000, bit_depth: bitDepth })
+      });
+      const data = await res.json();
+      if (data.export_url) {
+        window.open(data.export_url, '_blank');
+      }
+    }
+
+    function downloadCurrentAudio(fmt) {
+      if (!currentAudioUrl) return alert("Generate audio first before downloading.");
+      exportMasterAudio(fmt, 16);
+    }
+
+    // FULL CATALOG (TAB 5)
+    function renderFullCatalog() {
+      const q = (document.getElementById('fullCatalogSearch')?.value || '').toLowerCase();
+      const tbody = document.getElementById('fullCatalogTbody');
+      const filtered = allVoices.filter(v => 
+        v.name.toLowerCase().includes(q) ||
+        v.language.toLowerCase().includes(q) ||
+        v.category.toLowerCase().includes(q)
+      );
+
+      tbody.innerHTML = filtered.map(v => `
+        <tr>
+          <td><strong>${v.name}</strong></td>
+          <td>${v.language}</td>
+          <td>${v.accent}</td>
+          <td>${v.gender}</td>
+          <td><span class="tag">${v.category}</span></td>
+          <td>${v.engine}</td>
+          <td><span style="font-size:11px; color:var(--text-muted);">${v.license_type}</span></td>
+          <td>
+            <button class="btn-tool" onclick='selectVoiceById("${v.id}"); switchTab("ttsTab");'>Select</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // GENERATION HISTORY (TAB 7)
+    async function loadHistory() {
+      const res = await fetch('/api/generations');
+      const rows = await res.json();
+      const tbody = document.getElementById('historyTbody');
+      tbody.innerHTML = rows.map(r => `
+        <tr>
+          <td><span class="tag">${r.id}</span></td>
+          <td>${r.text_content.substring(0, 45)}...</td>
+          <td>${r.voice_id}</td>
+          <td>${r.duration_seconds.toFixed(1)}s</td>
+          <td>${r.format.toUpperCase()}</td>
+          <td>${new Date(r.created_at).toLocaleDateString()}</td>
+          <td>
+            <button class="btn-tool" onclick='loadAudioTrack("${r.audio_url}", "${r.voice_id}", ${r.duration_seconds})'>Play</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Bootstrap app
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>
