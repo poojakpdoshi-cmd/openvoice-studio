@@ -1205,6 +1205,10 @@
                 <div class="voice-card-header"><span>Ambient Chill</span><span class="tag">60 BPM</span></div>
                 <div class="voice-card-meta">Lush major 7th evolving pads, modal pentatonic chimes</div>
               </div>
+              <div class="voice-card music-genre-card" onclick="selectMusicGenre('documentary', this)">
+                <div class="voice-card-header"><span>Documentary Acoustic</span><span class="tag">70 BPM</span></div>
+                <div class="voice-card-meta">Piano arpeggios, warm cello layers & subtle cinematic drones</div>
+              </div>
             </div>
 
             <button class="btn-generate" style="margin-top:16px; width:100%; justify-content:center;" onclick="generateProceduralMusicUI()">
@@ -1309,6 +1313,54 @@
           </div>
           <div id="memeTimelineVisualizer" style="display:flex; flex-direction:column; gap:6px; background:var(--bg-primary); padding:10px; border-radius:6px; border:1px solid var(--border-color); min-height:80px; position:relative; overflow-x:auto;">
             <!-- Rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- VISUAL MEDIA & MEME VIDEO SETTINGS -->
+        <div class="workspace-col" style="padding:12px; margin-bottom:14px; background:var(--bg-card); border-radius:6px; border:1px solid var(--border-color);">
+          <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-bottom:8px;">
+            🎬 Visual Media Compositing & Meme Video Settings
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+            <!-- File Picker -->
+            <div style="display:flex; align-items:center; gap:8px;">
+              <input type="file" id="memeVisualInput" accept="image/*,video/*" onchange="onMemeVisualSelected(this)" style="display:none;">
+              <button class="btn-generate" onclick="document.getElementById('memeVisualInput').click()" style="background:var(--bg-primary); border:1px solid var(--border-color); color:var(--text-primary); padding:4px 10px; font-size:12px;">
+                📁 Choose Image/Video
+              </button>
+              <button class="btn-generate" onclick="clearMemeVisual()" style="background:var(--bg-primary); border:1px solid var(--border-color); color:var(--text-muted); padding:4px 8px; font-size:12px;" title="Reset to animated waveform canvas">
+                ✕ Reset
+              </button>
+              <span id="memeVisualStatus" style="font-size:11px; color:var(--text-muted);">Waveform Canvas (No file selected)</span>
+            </div>
+
+            <!-- Aspect Ratio -->
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:11px; color:var(--text-muted);">Aspect Ratio:</span>
+              <select id="memeAspectRatio" class="select-dropdown" style="padding:4px 8px; font-size:12px;">
+                <option value="16:9">16:9 Landscape (1280x720 - YouTube/Desktop)</option>
+                <option value="9:16">9:16 Portrait (720x1280 - TikTok/Reels)</option>
+                <option value="1:1">1:1 Square (720x720 - Instagram/Feed)</option>
+              </select>
+            </div>
+
+            <!-- Font styling -->
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:11px; color:var(--text-muted);">Size:</span>
+              <input type="number" id="memeFontSize" class="voice-search-input" value="44" min="20" max="80" style="width:55px; padding:4px;">
+              <span style="font-size:11px; color:var(--text-muted);">Color:</span>
+              <select id="memeFontColor" class="select-dropdown" style="padding:4px 6px; font-size:12px;">
+                <option value="white">White</option>
+                <option value="yellow">Yellow</option>
+                <option value="cyan">Cyan</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Captions row -->
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:10px;">
+            <input type="text" id="memeTopText" class="voice-search-input" placeholder="TOP CAPTION (e.g. WHEN THE AGENT COMPLETES)" style="font-weight:700; text-transform:uppercase;">
+            <input type="text" id="memeBottomText" class="voice-search-input" placeholder="BOTTOM CAPTION (e.g. ALL TESTS WITH ZERO ERRORS)" style="font-weight:700; text-transform:uppercase;">
           </div>
         </div>
 
@@ -2552,6 +2604,7 @@
                     <option value="dramatic" ${tr.music_genre === 'dramatic' ? 'selected' : ''}>Dramatic Crescendo</option>
                     <option value="minimal" ${tr.music_genre === 'minimal' ? 'selected' : ''}>Minimal Background</option>
                     <option value="ambient" ${tr.music_genre === 'ambient' ? 'selected' : ''}>Ambient Soundscape</option>
+                    <option value="documentary" ${tr.music_genre === 'documentary' ? 'selected' : ''}>Documentary Acoustic Cello & Piano</option>
                   </select>
                   <span style="font-size:11px; color:var(--text-muted);">BPM:</span>
                   <input type="number" class="voice-search-input" style="width:65px;" value="${tr.bpm || 120}" onchange="updateMemeTrackProp('${tr.id}', 'bpm', parseInt(this.value, 10))">
@@ -2717,10 +2770,32 @@
       }
     }
 
+    window.memeVisualBase64 = null;
+    function onMemeVisualSelected(input) {
+      if (input.files && input.files[0]) {
+        const file = input.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          window.memeVisualBase64 = e.target.result;
+          const statusEl = document.getElementById('memeVisualStatus');
+          if (statusEl) statusEl.innerText = `Selected: ${file.name} (${Math.round(file.size / 1024)} KB)`;
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+
+    function clearMemeVisual() {
+      window.memeVisualBase64 = null;
+      const fileInput = document.getElementById('memeVisualInput');
+      if (fileInput) fileInput.value = '';
+      const statusEl = document.getElementById('memeVisualStatus');
+      if (statusEl) statusEl.innerText = 'Waveform Canvas (No file selected)';
+    }
+
     async function renderMemeVideoUI() {
       try {
         const badge = document.getElementById('memeDuckingStatusBadge');
-        if (badge) badge.innerText = '🎬 Rendering multitrack mix & MP4 video canvas...';
+        if (badge) badge.innerText = '🎬 Rendering multitrack mix & MP4 video compositing...';
 
         const formattedTracks = memeTracks.map(t => ({
           name: t.name,
@@ -2752,14 +2827,33 @@
         const mixData = await mixRes.json();
         if (!mixData.audio_url) throw new Error(mixData.detail || 'Audio mixdown failed');
 
+        const topText = (document.getElementById('memeTopText')?.value || '').trim();
+        const bottomText = (document.getElementById('memeBottomText')?.value || '').trim();
+        const aspectRatio = document.getElementById('memeAspectRatio')?.value || '16:9';
+        const fontSize = parseInt(document.getElementById('memeFontSize')?.value, 10) || 44;
+        const fontColor = document.getElementById('memeFontColor')?.value || 'white';
+
+        const vidPayload = {
+          file_name: mixData.file_name,
+          title: 'OpenVoice Meme Production',
+          aspect_ratio: aspectRatio,
+          top_text: topText,
+          bottom_text: bottomText,
+          font_size: fontSize,
+          font_color: fontColor,
+          outline_color: 'black',
+          outline_width: 4,
+          media_base64: window.memeVisualBase64 || undefined
+        };
+
         const vidRes = await fetch('/api/meme/video', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file_name: mixData.file_name, title: 'OpenVoice Meme Production' })
+          body: JSON.stringify(vidPayload)
         });
         const vidData = await vidRes.json();
         if (vidData.video_url) {
-          if (badge) badge.innerText = `✅ MP4 Video Export Ready (${vidData.file_name})`;
+          if (badge) badge.innerText = `✅ MP4 Video Export Ready (${vidData.file_name} • ${vidData.resolution || '1280x720'})`;
           window.open(vidData.video_url, '_blank');
         } else {
           alert('Video export error: ' + (vidData.detail || 'Unknown error'));

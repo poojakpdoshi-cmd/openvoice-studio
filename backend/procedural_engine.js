@@ -379,6 +379,51 @@ const SynthInstruments = {
       buf[i] = filter.process(sum / numOsc) * Math.exp(-t * 2.2);
     }
     return normalizeAndLimit(buf, -1.0);
+  },
+
+  /**
+   * Acoustic Piano Note Synthesizer (Harmonic additive model with felt hammer strike)
+   */
+  pianoNote: (freq, duration, sampleRate = SAMPLE_RATE, { velocity = 0.8, rng = null } = {}) => {
+    const numSamples = Math.floor(duration * sampleRate);
+    const buf = new Float32Array(numSamples);
+    const pFreqs = [freq, freq * 2.002, freq * 3.006, freq * 4.01];
+    const pAmps = [1.0, 0.45, 0.2, 0.08];
+    const pDecays = [2.0, 3.2, 4.8, 6.0];
+    const phases = [0, 0, 0, 0];
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      let s = 0;
+      for (let p = 0; p < 4; p++) {
+        phases[p] += (2 * Math.PI * pFreqs[p]) / sampleRate;
+        s += Math.sin(phases[p]) * pAmps[p] * Math.exp(-t * pDecays[p]);
+      }
+      const touch = t < 0.005 ? (rng ? (rng() * 2 - 1) : 0) * (1.0 - t / 0.005) * 0.12 : 0;
+      buf[i] = (s + touch) * velocity;
+    }
+    return buf;
+  },
+
+  /**
+   * Warm Cello Layer (Rich bowed sawtooth with body formant filter and subtle vibrato)
+   */
+  warmCello: (freq, duration, sampleRate = SAMPLE_RATE, { vibratoFreq = 5.2, vibratoDepth = 0.012 } = {}) => {
+    const numSamples = Math.floor(duration * sampleRate);
+    const buf = new Float32Array(numSamples);
+    let phase = 0;
+    const bodyFilter = new BiquadFilter('lowpass', 650, 1.4, sampleRate);
+    const attackSamples = Math.floor(0.25 * sampleRate);
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      let env = 1.0;
+      if (i < attackSamples) env = i / attackSamples;
+      else if (i > numSamples - attackSamples) env = (numSamples - i) / attackSamples;
+      const vib = 1.0 + Math.sin(2 * Math.PI * vibratoFreq * t) * vibratoDepth;
+      phase += (2 * Math.PI * freq * vib) / sampleRate;
+      const rawSaw = Oscillators.sawtooth(phase) * 0.7 + Oscillators.triangle(phase * 0.5) * 0.3;
+      buf[i] = bodyFilter.process(rawSaw) * env;
+    }
+    return buf;
   }
 };
 
@@ -965,6 +1010,10 @@ const SynthDrums = {
     return buf;
   },
 
+  hihat: (sampleRate = SAMPLE_RATE, opts = {}) => {
+    return SynthDrums.hihat_closed(sampleRate, opts);
+  },
+
   hihat_open: (sampleRate = SAMPLE_RATE, { rng = null } = {}) => {
     const numSamples = Math.floor(0.25 * sampleRate);
     const buf = new Float32Array(numSamples);
@@ -1057,6 +1106,9 @@ function generateProceduralMusic({
   } else if (genre === 'dramatic') {
     activeScale = SCALES.harmonic_minor;
     scaleName = 'harmonic_minor';
+  } else if (genre === 'documentary') {
+    activeScale = SCALES.natural_minor || SCALES.minor;
+    scaleName = 'minor';
   }
 
   const rootMidi = getMidiRoot(key, 3);
@@ -1477,7 +1529,79 @@ function generateProceduralMusic({
     }
   }
 
-  // 9. AMBIENT / CHILL SOUNDSCAPE (DEFAULT)
+  // 9. DOCUMENTARY / ACOUSTIC STORYTELLING
+  else if (genre === 'documentary') {
+    const root = getMidiRoot(key, 3);
+    // Natural cinematic storytelling progression: i - VI - III - VII (e.g. Dm - Bb - F - C)
+    const chords = customChords || [root, root - 4, root + 3, root - 2];
+    const totalBars = Math.ceil(totalBeats / 4);
+
+    // Subtle cinematic drone layer (Tonic root in octave 2, soft filtered sine/triangle pad)
+    const droneFreq = noteToFreq(root - 12);
+    const droneBuf = new Float32Array(totalSamples);
+    let dronePhase = 0;
+    for (let i = 0; i < totalSamples; i++) {
+      const t = i / sampleRate;
+      dronePhase += (2 * Math.PI * droneFreq) / sampleRate;
+      const droneSwell = 0.65 + 0.35 * Math.sin(t * 0.4);
+      droneBuf[i] = (Oscillators.sine(dronePhase) * 0.75 + Oscillators.triangle(dronePhase) * 0.25) * droneSwell * 0.35;
+    }
+    mixClip(masterBuffer, droneBuf, 0, 0.7);
+
+    // Warm Cello Layers (Sustained bass/mid chords per bar)
+    for (let bar = 0; bar < totalBars; bar++) {
+      const chordRoot = chords[bar % chords.length];
+      const barStartSample = bar * 4 * samplesPerBeat;
+      const barDuration = Math.min(safeDur - (bar * 4 * beatDuration), 4 * beatDuration);
+      if (barDuration <= 0.1) break;
+
+      // Cello plays root and fifth
+      const celloRoot = SynthInstruments.warmCello(noteToFreq(chordRoot - 12), barDuration, sampleRate);
+      const celloFifth = SynthInstruments.warmCello(noteToFreq(chordRoot - 5), barDuration, sampleRate);
+      mixClip(masterBuffer, celloRoot, barStartSample, 0.28);
+      mixClip(masterBuffer, celloFifth, barStartSample, 0.18);
+    }
+
+    // Dynamic Intro, Development, and Outro for Piano Arpeggios and Gentle Percussion
+    for (let b = 0; b < totalBeats; b++) {
+      const beatStart = b * samplesPerBeat;
+      const barIdx = Math.floor(b / 4);
+      const beatInBar = b % 4;
+      const chordRoot = chords[barIdx % chords.length];
+
+      // Dynamic Section Identification
+      const isIntro = b < 4; // First bar is gentle intro
+      const isOutro = b >= totalBeats - 4; // Final bar is gentle resolving outro
+      const velocityScale = isIntro ? 0.65 : isOutro ? 0.6 : 0.85;
+
+      // Piano Arpeggio Notes (Flowing acoustic arpeggios: 2 notes per beat)
+      const arpeggioOffsets = [0, 7, 12, 15, 12, 7, 3, 7];
+      const subNotesPerBeat = 2;
+      for (let s = 0; s < subNotesPerBeat; s++) {
+        const step = (beatInBar * subNotesPerBeat + s) % arpeggioOffsets.length;
+        const noteMidi = chordRoot + 12 + arpeggioOffsets[step];
+        const noteDur = beatDuration * 1.5;
+        const vel = velocityScale * (s === 0 ? 0.8 : 0.65) * (0.85 + rng() * 0.3);
+        const piano = SynthInstruments.pianoNote(noteToFreq(noteMidi), noteDur, sampleRate, { velocity: vel, rng });
+        const noteStart = beatStart + Math.floor(s * (samplesPerBeat / subNotesPerBeat));
+        mixClip(masterBuffer, reverb.process(piano, 0.45, 0.4), noteStart, 0.32);
+      }
+
+      // Gentle Percussion (Development section only: after intro, before outro)
+      if (!isIntro && !isOutro) {
+        // Soft felt kick on beat 1
+        if (beatInBar === 0) {
+          const kick = SynthDrums.kick(sampleRate, { duration: 0.18, startFreq: 110, endFreq: 40 });
+          mixClip(masterBuffer, kick, beatStart, 0.35);
+        }
+        // Gentle shaker / brush tick on offbeats
+        const shaker = SynthDrums.hihat(sampleRate, { duration: 0.04, rng });
+        mixClip(masterBuffer, shaker, beatStart + Math.floor(samplesPerBeat * 0.5), 0.12);
+      }
+    }
+  }
+
+  // 10. AMBIENT / CHILL SOUNDSCAPE (DEFAULT)
   else {
     const root = getMidiRoot(key, 3);
     const chords = customChords || [root, root + 5, root - 2, root];
@@ -1713,6 +1837,7 @@ function parseProceduralPrompt(promptText) {
     { genre: 'cinematic', default_bpm: 90, default_key: 'D', keys: ['cinematic', 'epic', 'orchestral', 'movie', 'soundtrack', 'trailer'] },
     { genre: 'happy', default_bpm: 128, default_key: 'C', keys: ['happy', 'upbeat', 'cheerful', 'joyful', 'bouncy'] },
     { genre: 'dramatic', default_bpm: 80, default_key: 'C', keys: ['dramatic', 'drama', 'intense', 'crescendo'] },
+    { genre: 'documentary', default_bpm: 70, default_key: 'D', keys: ['documentary', 'nature', 'docuseries', 'history', 'biography', 'acoustic storytelling'] },
     { genre: 'minimal', default_bpm: 88, default_key: 'C', keys: ['minimal', 'minimalist', 'lofi', 'lo-fi'] },
     { genre: 'ambient', default_bpm: 60, default_key: 'C', keys: ['ambient', 'chill', 'meditation', 'drone', 'soundscape', 'peaceful'] }
   ];

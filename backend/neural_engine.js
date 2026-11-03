@@ -491,10 +491,9 @@ function applyStyleDSP(inputWav, outputWav, styleName, intensity = 1.0, sampleRa
       break;
   }
 
-  if (filters.length === 0) {
-    if (inputWav !== outputWav) fs.copyFileSync(inputWav, outputWav);
-    return outputWav;
-  }
+  // Final lookahead brickwall limiter: strict -1.0 dBFS ceiling (linear ~0.891251),
+  // level=0 prevents auto-normalization, latency=1 compensates lookahead delay.
+  filters.push('alimiter=limit=0.891251:attack=5:release=50:level=0:latency=1');
 
   const tempOut = outputWav + '.dsp.tmp.wav';
   try {

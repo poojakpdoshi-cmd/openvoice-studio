@@ -1067,7 +1067,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // 9D. Meme Studio Video Export (MP4 with Animated Waveform Canvas)
+    // 9D. Meme Studio Video Export (MP4 with Visual Media Compositing, Aspect Ratios & Impact Captions)
     if (pathname === '/api/meme/video' && method === 'POST') {
       const body = await getBody();
       const audioFileName = body.file_name || (body.audio_url ? path.basename(body.audio_url) : null);
@@ -1079,25 +1079,191 @@ const server = http.createServer(async (req, res) => {
       const videoId = `meme_video_${crypto.randomBytes(4).toString('hex')}.mp4`;
       const videoPath = path.join(AUDIO_DIR, videoId);
       const audioQuality = await neuralEngine.analyzeAudioFile(audioPath);
-      const dur = Math.max(1.0, audioQuality.duration_seconds || 5.0);
+      const dur = Math.max(0.5, audioQuality.duration_seconds || 5.0);
 
-      const ffmpegArgs = [
-        '-y',
-        '-f', 'lavfi', '-i', `color=c=0x0d1117:s=1280x720:d=${dur.toFixed(2)}`,
-        '-i', audioPath,
-        '-filter_complex',
-        '[1:a]showwaves=s=1200x260:mode=line:colors=0x58a6ff[vwave];[0:v][vwave]overlay=(W-w)/2:(H-h)/2[v]',
-        '-map', '[v]',
-        '-map', '1:a',
-        '-c:v', 'libx264',
-        '-pix_fmt', 'yuv420p',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        videoPath
-      ];
+      // 1. Aspect Ratio Configuration
+      const aspectRatio = (body.aspect_ratio || '16:9').toLowerCase();
+      let W = 1280;
+      let H = 720;
+      if (aspectRatio === '9:16') {
+        W = 720;
+        H = 1280;
+      } else if (aspectRatio === '1:1') {
+        W = 720;
+        H = 720;
+      }
+
+      // 2. Track Temporary Files for Cleanup
+      const tempFiles = [];
+      const cleanupTempFiles = () => {
+        for (const tf of tempFiles) {
+          try { if (fs.existsSync(tf)) fs.unlinkSync(tf); } catch (_) {}
+        }
+      };
+
+      // 3. Impact/Arial Font Discovery (Cross-Platform)
+      let fontPath = '';
+      if (process.platform === 'win32') {
+        if (fs.existsSync('C:/Windows/Fonts/impact.ttf')) {
+          fontPath = '/Windows/Fonts/impact.ttf';
+        } else if (fs.existsSync('C:/Windows/Fonts/arial.ttf')) {
+          fontPath = '/Windows/Fonts/arial.ttf';
+        }
+      }
+
+      // 4. Captions Configuration
+      const topText = (body.top_text || '').trim();
+      const bottomText = (body.bottom_text || '').trim();
+      const centerText = (body.center_text || '').trim();
+      const fontSize = parseInt(body.font_size) || (aspectRatio === '9:16' ? 48 : (aspectRatio === '1:1' ? 42 : 44));
+      const fontColor = body.font_color || 'white';
+      const outlineColor = body.outline_color || 'black';
+      const outlineWidth = parseInt(body.outline_width) !== undefined && !isNaN(parseInt(body.outline_width)) ? parseInt(body.outline_width) : 4;
+
+      const makeDrawtextFilter = (text, yExpr, prefix) => {
+        if (!text) return null;
+        const capFile = path.join(AUDIO_DIR, `temp_cap_${prefix}_${crypto.randomBytes(4).toString('hex')}.txt`);
+        fs.writeFileSync(capFile, text, 'utf8');
+        tempFiles.push(capFile);
+        const escPath = capFile.replace(/\\/g, '/').replace(/:/g, '\\:');
+        const fontOpt = fontPath ? `fontfile='${fontPath}':` : '';
+        return `drawtext=${fontOpt}textfile='${escPath}':fontsize=${fontSize}:fontcolor=${fontColor}:borderw=${outlineWidth}:bordercolor=${outlineColor}:x=(w-text_w)/2:y=${yExpr}`;
+      };
+
+      const topFilter = makeDrawtextFilter(topText, `${Math.round(H * 0.05)}`, 'top');
+      const bottomFilter = makeDrawtextFilter(bottomText, `h-text_h-${Math.round(H * 0.05)}`, 'bot');
+      const centerFilter = makeDrawtextFilter(centerText, `(h-text_h)/2`, 'cen');
+
+      // 5. Visual Media Ingestion (Base64 or Disk File)
+      let visualMediaFile = null;
+      let isVideo = false;
+      let isImage = false;
+
+      if (body.media_base64 && typeof body.media_base64 === 'string') {
+        let mediaBuffer = null;
+        let ext = '.png';
+        const match = body.media_base64.match(/^data:([a-zA-Z0-9\/+-]+);base64,(.+)$/);
+        if (match) {
+          const mime = match[1].toLowerCase();
+          if (mime.includes('jpeg') || mime.includes('jpg')) ext = '.jpg';
+          else if (mime.includes('png')) ext = '.png';
+          else if (mime.includes('gif')) ext = '.gif';
+          else if (mime.includes('webp')) ext = '.webp';
+          else if (mime.includes('mp4')) ext = '.mp4';
+          else if (mime.includes('webm')) ext = '.webm';
+          else if (mime.includes('quicktime') || mime.includes('mov')) ext = '.mov';
+          mediaBuffer = Buffer.from(match[2], 'base64');
+        } else {
+          mediaBuffer = Buffer.from(body.media_base64, 'base64');
+          ext = (body.media_type === 'video' || (body.media_ext && body.media_ext.includes('mp4'))) ? '.mp4' : '.png';
+        }
+        const tempVisual = path.join(AUDIO_DIR, `temp_media_${crypto.randomBytes(4).toString('hex')}${ext}`);
+        fs.writeFileSync(tempVisual, mediaBuffer);
+        tempFiles.push(tempVisual);
+        visualMediaFile = tempVisual;
+      } else if (body.media_file) {
+        const candidate = path.join(AUDIO_DIR, path.basename(body.media_file));
+        if (fs.existsSync(candidate)) visualMediaFile = candidate;
+      }
+
+      if (visualMediaFile) {
+        const lower = visualMediaFile.toLowerCase();
+        if (lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.webm') || lower.endsWith('.mkv') || lower.endsWith('.avi')) {
+          isVideo = true;
+        } else {
+          isImage = true;
+        }
+      }
+
+      // 6. Build FFmpeg Command Arguments
+      let ffmpegArgs = [];
+
+      if (isImage) {
+        // Image Loop with Aspect Ratio Letterboxing & Captions
+        const vfFilters = [
+          `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
+          `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`
+        ];
+        if (topFilter) vfFilters.push(topFilter);
+        if (centerFilter) vfFilters.push(centerFilter);
+        if (bottomFilter) vfFilters.push(bottomFilter);
+
+        ffmpegArgs = [
+          '-y',
+          '-loop', '1', '-i', visualMediaFile,
+          '-i', audioPath,
+          '-vf', vfFilters.join(','),
+          '-c:v', 'libx264',
+          '-pix_fmt', 'yuv420p',
+          '-preset', 'fast',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-shortest',
+          videoPath
+        ];
+      } else if (isVideo) {
+        // Video Input with Looping, Trimming, Letterboxing & Captions
+        const vfFilters = [
+          `scale=${W}:${H}:force_original_aspect_ratio=decrease`,
+          `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`
+        ];
+        if (topFilter) vfFilters.push(topFilter);
+        if (centerFilter) vfFilters.push(centerFilter);
+        if (bottomFilter) vfFilters.push(bottomFilter);
+
+        ffmpegArgs = ['-y'];
+        if (body.video_start && Number(body.video_start) > 0) {
+          ffmpegArgs.push('-ss', String(Number(body.video_start)));
+        }
+        ffmpegArgs.push(
+          '-stream_loop', '-1',
+          '-i', visualMediaFile,
+          '-i', audioPath,
+          '-vf', vfFilters.join(','),
+          '-map', '0:v',
+          '-map', '1:a',
+          '-c:v', 'libx264',
+          '-pix_fmt', 'yuv420p',
+          '-preset', 'fast',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-t', dur.toFixed(2),
+          videoPath
+        );
+      } else {
+        // Fallback: Animated Audio Waveform Canvas with Captions
+        let filterComplex = `[1:a]showwaves=s=${W - 80}x${Math.round(H * 0.35)}:mode=line:colors=0x58a6ff[vwave];[0:v][vwave]overlay=(W-w)/2:(H-h)/2[vbase]`;
+        let lastTag = '[vbase]';
+        let step = 0;
+        const captionFilters = [topFilter, centerFilter, bottomFilter].filter(Boolean);
+        for (let i = 0; i < captionFilters.length; i++) {
+          const nextTag = (i === captionFilters.length - 1) ? '[v]' : `[v${++step}]`;
+          filterComplex += `;${lastTag}${captionFilters[i]}${nextTag}`;
+          lastTag = nextTag;
+        }
+        if (captionFilters.length === 0) {
+          filterComplex = filterComplex.replace('[vbase]', '[v]');
+        }
+
+        ffmpegArgs = [
+          '-y',
+          '-f', 'lavfi', '-i', `color=c=0x0d1117:s=${W}x${H}:d=${dur.toFixed(2)}`,
+          '-i', audioPath,
+          '-filter_complex', filterComplex,
+          '-map', '[v]',
+          '-map', '1:a',
+          '-c:v', 'libx264',
+          '-pix_fmt', 'yuv420p',
+          '-preset', 'fast',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-shortest',
+          videoPath
+        ];
+      }
 
       execFile('ffmpeg', ffmpegArgs, (err) => {
+        cleanupTempFiles();
         if (err) {
           console.error('[Video Export Error]', err);
           return sendJson(500, { detail: `Video export failed: ${err.message}` });
@@ -1109,8 +1275,11 @@ const server = http.createServer(async (req, res) => {
           file_name: videoId,
           duration_seconds: dur,
           file_size_bytes: stat.size,
-          resolution: '1280x720',
-          format: 'mp4'
+          resolution: `${W}x${H}`,
+          aspect_ratio: aspectRatio,
+          format: 'mp4',
+          media_type: isVideo ? 'video' : (isImage ? 'image' : 'waveform'),
+          captions: { top: topText, bottom: bottomText, center: centerText }
         });
       });
       return;

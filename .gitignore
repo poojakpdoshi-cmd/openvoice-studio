@@ -10,5 +10,6 @@ storage/openvoice.db
 storage/temp*
 storage/test_procedural_output/
 storage/procedural/*
+test-results/
 .DS_Store
 Thumbs.db
